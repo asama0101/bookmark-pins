@@ -1,0 +1,7 @@
+.worktrees/
+.superpowers/
+superpowers/
+docs/*
+!docs/images/
+CLAUDE.md
+node_modules/
