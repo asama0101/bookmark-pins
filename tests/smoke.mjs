@@ -81,6 +81,54 @@ await open(page, [bm(0, { url: 'http://intranet-hr/', domain: 'intranet-hr' }), 
 await page.waitForTimeout(300);
 check('単語だけのホスト名は Google に送らない', !reqs.some((u) => u.includes('favicons') && u.includes('intranet-hr')), reqs);
 
+// 追加フォームの URL 欄への貼り付け: 「タイトル+改行+URL」の2行だけ、タイトルも受け取る
+async function paste(p, text) {
+  return p.$eval('#new-url', (el, t) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', t);
+    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }, text);
+}
+async function freshAddForm(p, data) {
+  await open(p, data || []);
+  await p.click('#toggle-add-btn');
+}
+const fields = (p) => p.evaluate(() => ({ url: document.getElementById('new-url').value, title: document.getElementById('new-title').value }));
+
+await freshAddForm(page);
+let pr = await paste(page, 'Example Domain\r\nhttps://example.com/');
+let f = await fields(page);
+check('2行の貼り付けで URL とタイトルが入る', pr === true && f.url === 'https://example.com/' && f.title === 'Example Domain', { pr, f });
+
+await freshAddForm(page);
+await page.fill('#new-title', 'old');
+await paste(page, 'Example Domain\r\nhttps://example.com/');
+check('貼り付けはタイトル欄を上書きする', (await fields(page)).title === 'Example Domain');
+
+await freshAddForm(page);
+pr = await paste(page, '\n  T  \n\n https://a.example.com \n');
+f = await fields(page);
+check('前後の空白・空行・LF だけでも振り分ける', pr === true && f.title === 'T' && f.url === 'https://a.example.com', { pr, f });
+
+for (const [name, text] of [
+  ['URL が2行は振り分けない', 'https://a.com\nhttps://b.com'],
+  ['URL だけは標準の貼り付け', 'https://a.com'],
+  ['空のタイトルは標準の貼り付け', '\nhttps://a.com'],
+  ['3行は標準の貼り付け', 'a\nb\nhttps://a.com'],
+  ['2行目が URL でなければ標準(bar)', 'foo\nbar'],
+  ['2行目が URL でなければ標準(javascript:)', 'foo\njavascript:alert(1)'],
+]) {
+  await freshAddForm(page);
+  pr = await paste(page, text);
+  check(name, pr === false && (await fields(page)).title === '', { pr });
+}
+
+await freshAddForm(page, [bm(0, { tags: ['ai'] })]);
+await paste(page, 'ai の記事\nhttps://x.example.com/');
+check('貼り付けでタグの事前選択が更新される', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())).startsWith('ai'));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

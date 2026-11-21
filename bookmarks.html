@@ -1252,6 +1252,13 @@
     }
   }
 
+  // 貼り付けた「タイトル+改行+URL」を分ける。空行を除いてちょうど2行で、2行目だけが URL のときに限る
+  function parseTitleAndUrl(text) {
+    var lines = String(text).split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    if (lines.length !== 2 || classifyUrl(lines[0]) || !classifyUrl(lines[1])) return null;
+    return { title: lines[0], url: lines[1] };
+  }
+
   // UNCパスはブラウザのfile://ハンドリングに直接渡せないため、表示直前にfile://表記へ変換する。
   // 保存値(b.url)自体は変換しない(design-audit CP-Aで確定: 環境依存の表記ゆれをsanitizeBookmark段階に持ち込まないため)
   function resolveOpenHref(b) {
@@ -2530,6 +2537,15 @@
     var scheme = classifyUrl(newUrlInput.value.trim());
     if (!scheme) return;
     newTitleInput.value = deriveTentativeTitle(newUrlInput.value.trim(), scheme);
+  });
+  // 「タイトル+改行+URL」を貼ったときは、URL とタイトルの両方を入れる(input を出さないので、上のホスト名の自動補完は動かない)
+  newUrlInput.addEventListener('paste', function (e) {
+    var parsed = parseTitleAndUrl(e.clipboardData.getData('text'));
+    if (!parsed) return;
+    e.preventDefault();
+    newUrlInput.value = parsed.url;
+    newTitleInput.value = parsed.title;
+    previewAddFormTags();
   });
   [newUrlInput, newTitleInput, newMemoInput].forEach(function (el) {
     el.addEventListener('input', previewAddFormTags);
