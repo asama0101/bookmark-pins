@@ -158,6 +158,11 @@ await paste(page, clip);
 f = await fields(page);
 check('コピーした内容を貼ると URL とタイトルが入る', f.url === 'https://page.test/' && f.title === 'Foo Bar', f);
 
+// 保存でフォームがリセットされても、手動登録用のコード欄は空にならない
+await open(page, []);
+await add(page, 'SAVED');
+check('保存後もコード欄が空でない', (await page.$eval('#bookmarklet-code', (e) => e.value)).length > 0);
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
