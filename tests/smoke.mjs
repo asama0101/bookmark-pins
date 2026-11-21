@@ -140,7 +140,7 @@ const linkPrevented = await page.$eval('#bookmarklet-link', (el) => {
 }).catch(() => null);
 check('登録用リンクのクリックは何も実行しない', linkPrevented === true, linkPrevented);
 const shownCode = await page.$eval('#bookmarklet-code', (e) => e.value).catch(() => null);
-check('表示用コードがリンクと同じ', shownCode !== null && href === 'javascript:' + shownCode, { shownCode });
+check('表示用コードは javascript: で始まり、リンクと同じ', shownCode !== null && shownCode.startsWith('javascript:') && href === shownCode, { shownCode });
 
 // 実際のページでコードを動かし、クリップボードの内容をアプリへ貼る(外部通信なし。ページは route で返す)
 await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
@@ -148,7 +148,8 @@ await ctx.route('https://page.test/**', (r) => r.fulfill({ contentType: 'text/ht
 const src = await ctx.newPage();
 await src.goto('https://page.test/');
 await src.bringToFront();
-await src.evaluate(shownCode || '');
+// 表示されたコードを、そのままブックマークの URL にしたもの(手動登録)として押した場合
+await src.evaluate((h) => { const a = document.createElement('a'); a.href = h; document.body.appendChild(a); a.click(); }, shownCode || '');
 const clip = await src.evaluate(() => navigator.clipboard.readText()).catch((e) => String(e));
 check('ブックマークレットは「タイトル+改行+URL」をコピーする', JSON.stringify(clip.split(/\r?\n/)) === JSON.stringify(['Foo Bar', 'https://page.test/']), clip);
 await src.close();
