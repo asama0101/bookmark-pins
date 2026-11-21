@@ -2525,7 +2525,7 @@
   var bookmarkletCode = document.getElementById('bookmarklet-code');
   bookmarkletLink.href = 'javascript:' + TITLE_COPY_BOOKMARKLET;
   bookmarkletLink.addEventListener('click', function (e) { e.preventDefault(); }); // アプリ自身のページでは実行しない(ドラッグで登録するためのリンク)
-  bookmarkletCode.value = TITLE_COPY_BOOKMARKLET;
+  bookmarkletCode.value = 'javascript:' + TITLE_COPY_BOOKMARKLET; // そのままブックマークの URL に貼れるよう、リンクと同じ形にする
   bookmarkletCode.addEventListener('focus', function () { bookmarkletCode.select(); });
 
   var addForm = document.getElementById('add-form');
