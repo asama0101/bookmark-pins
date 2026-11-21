@@ -224,6 +224,45 @@
   }
   .btn-danger:hover { background: var(--wine); color: #fff; }
 
+  /* ---------- グループの絞り込みのパネル(ヘッダーの「グループ」ボタンの下) ---------- */
+
+  #group-filter-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #group-filter-btn[aria-expanded="true"], #group-filter-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.12); }
+  .group-popover {
+    position: fixed;
+    top: calc(var(--header-h) - 4px);
+    right: 32px;
+    z-index: 30;
+    width: min(420px, calc(100vw - 24px));
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    padding: 14px;
+    background: var(--card);
+    border-radius: 22px;
+    box-shadow: 0 2px 4px rgba(40, 60, 90, 0.08), 0 30px 60px -20px rgba(40, 60, 90, 0.45);
+  }
+  .group-popover[hidden] { display: none; }
+  .group-row {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 14px;
+    cursor: pointer;
+    color: var(--ink);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .group-row:hover { background: var(--hover); }
+  .group-row:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
+  .group-row[aria-pressed="true"] { background: var(--amber); color: #fff; }
+  .group-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* 長い名前も、省略せず全文で出す */
+  .group-row-count { flex: none; font-size: 0.8rem; color: var(--ink-soft); }
+  .group-row[aria-pressed="true"] .group-row-count { color: rgba(255, 255, 255, 0.8); }
+
   /* ---------- 追加フォーム ---------- */
 
   .add-panel {
@@ -520,6 +559,19 @@
     border-radius: 50%;
   }
   .modal-close-btn:hover { color: var(--amber); background: var(--hover); }
+
+  .manage-tabs { display: flex; gap: 6px; margin: 0 0 12px; }
+  .manage-tabs button {
+    border: none;
+    background: var(--ivory);
+    color: var(--ink-soft);
+    padding: 6px 18px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 600;
+  }
+  .manage-tabs button:hover { color: var(--amber); }
+  .manage-tabs button[aria-selected="true"] { background: var(--amber); color: #fff; }
 
   .tag-manage-hint {
     font-size: 0.78rem;
@@ -972,6 +1024,7 @@
   </div>
   <div class="header-actions">
     <button class="btn btn-amber" id="toggle-add-btn" type="button">+ 追加</button>
+    <button class="btn btn-ghost btn-compact" id="group-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="group-popover">グループ</button>
     <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">タグ管理</button>
     <button class="btn btn-ghost btn-compact" id="auto-tag-btn" type="button">自動タグ付け</button>
     <button class="btn btn-ghost" id="export-btn" type="button">エクスポート</button>
@@ -980,6 +1033,8 @@
     <input type="file" id="import-file" accept="application/json,.json" hidden>
   </div>
 </header>
+
+<div class="group-popover" id="group-popover" role="group" aria-label="グループで絞り込む" hidden></div>
 
 <section class="add-panel" id="add-panel" hidden>
   <form id="add-form" class="add-grid">
@@ -996,6 +1051,12 @@
       <div class="chip-list" id="new-tag-chips"></div>
       <input id="new-tag-text" type="text" placeholder="タグを入力" autocomplete="off">
       <div class="chip-list" id="new-tag-suggest"></div>
+    </div>
+    <div class="field">
+      <label for="new-group-text">グループ(Enter かカンマで確定)</label>
+      <div class="chip-list" id="new-group-chips"></div>
+      <input id="new-group-text" type="text" placeholder="グループを入力" autocomplete="off">
+      <div class="chip-list" id="new-group-suggest"></div>
     </div>
     <div class="field">
       <button class="btn btn-amber" type="submit">保存</button>
@@ -1037,7 +1098,7 @@
   <h2>キーボードショートカット</h2>
   <dl class="help-grid">
     <dt><kbd>/</kbd></dt><dd>検索ボックスへフォーカス</dd>
-    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でタグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; 自動タグ付け &rarr; タグ管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
+    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でグループ・タグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; グループのパネル &rarr; 自動タグ付け &rarr; タグ管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
   </dl>
 </section>
 
@@ -1078,10 +1139,14 @@
 <div class="modal-overlay" id="tag-manage-overlay" hidden>
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
     <div class="modal-header">
-      <h2 id="tag-manage-title">タグ管理</h2>
+      <h2 id="tag-manage-title">タグ・グループの管理</h2>
       <button type="button" class="modal-close-btn" id="tag-manage-close-btn" aria-label="閉じる">&times;</button>
     </div>
-    <p class="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
+    <div class="manage-tabs" role="tablist" aria-label="管理する対象">
+      <button type="button" role="tab" data-manage-tab="tag" aria-selected="true">タグ</button>
+      <button type="button" role="tab" data-manage-tab="group" aria-selected="false">グループ</button>
+    </div>
+    <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
     <p class="tag-manage-empty" id="tag-manage-empty" hidden>タグがありません。ブックマークにタグを付けると、ここに表示されます。</p>
   </div>
@@ -1122,11 +1187,13 @@
     selectedId: null,      // 詳細パネルに出しているブックマークのID。無ければnull。保存しない
     filterTag: null,       // 絞り込み中のタグのキー(小文字)。無ければnull。保存しない
     filterUntagged: false,  // 「タグなし」で絞り込み中か。保存しない
+    filterGroup: null,      // 絞り込み中のグループのキー(小文字)。'' は「グループなし」。無ければnull。保存しない
     editingTag: null,       // タグ管理モーダルで改名中のタグのキー
     renameDraft: null,      // 改名の入力中(確認の段階を含む)の新しい名前
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
-    colorEditing: null      // タグ管理モーダルで色を選んでいるタグのキー
+    colorEditing: null,     // タグ管理モーダルで色を選んでいるタグのキー
+    manageTab: 'tag'        // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'tag' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
   /* ---------- データ層 ---------- */
@@ -1160,10 +1227,12 @@
       // 旧形式(グループ)のデータは、読み込み時にタグへ変換する(group → [group])。ディスクへは次の保存で反映される
       parsed.forEach(function (b) {
         b.tags = normalizeTags(b.tags, b.group);
+        b.groups = normalizeGroups(b.groups); // グループ(v3 から)。旧データには無いので、空になる
         delete b.group;
         delete b.groupOrder;
       });
       unifyTagNames(parsed);
+      unifyGroupNames(parsed);
 
       // 廃止したフィールドは読み込み時に捨てる。ディスクへは次の保存で反映される
       stripLegacyFields(parsed);
@@ -1213,14 +1282,17 @@
     localStorage.setItem(TAG_ORDER_KEY, JSON.stringify(tagOrder));
   }
 
-  // 「タグごと」表示の区画の順(タグのキーの配列)。タグのタイルの並び(tagOrder)とは別で、タグ管理で決める。無ければ空
-  var GROUP_ORDER_KEY = 'bookmarks_group_order';
-  var groupOrder = (function () {
-    try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUP_ORDER_KEY))); } catch (e) { return []; }
-  })();
+  // グループの並び(グループのキー(小文字)の配列)。タグのタイルの並び(tagOrder)とは別で、グループ管理で決める。無ければ空。
+  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す
+  var GROUPS_ORDER_KEY = 'bookmarks_groups_order';
+  try { localStorage.removeItem('bookmarks_group_order'); } catch (e) { /* 消せなくても起動は続ける */ }
+  function loadGroupOrder() {
+    try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUPS_ORDER_KEY))); } catch (e) { return []; }
+  }
+  var groupOrder = loadGroupOrder();
 
   function saveGroupOrder() {
-    localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(groupOrder));
+    localStorage.setItem(GROUPS_ORDER_KEY, JSON.stringify(groupOrder));
   }
 
   // タグごとの色(タグのキー → 色相 0〜359)。選んでいない(自動。タグ名から決める)タグは持たない。
@@ -1414,6 +1486,7 @@
       url: url,
       title: title,
       tags: normalizeTags(raw.tags, raw.group), // 旧形式(group)の要素は、group 名を1つのタグにする
+      groups: normalizeGroups(raw.groups),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -1484,39 +1557,89 @@
     });
   }
 
-  // 「タグごと」表示とタグ管理の一覧でのタグの順。区画の順(groupOrder)にあるものを先に、残りはタイルと同じ順
-  function getGroupTags() {
-    return getTags().map(function (t, i) { return { t: t, i: i }; }).sort(function (a, b) {
-      var ia = groupOrder.indexOf(a.t.key);
-      var ib = groupOrder.indexOf(b.t.key);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      return a.i - b.i;
-    }).map(function (x) { return x.t; });
-  }
+  // 別のタブが保存した変更を取り込んだ再描画の間は true。そのあいだ pruneTagOrder() は、メモリ上でだけ整え、保存しない。
+  // 保存すると、取り込み途中の古い並び・色が、別のタブが先に書いた新しい並びを上書きして消す(データ→並びの順に届くため)
+  var syncingFromStorage = false;
 
-  // 使われなくなったタグ(削除・編集などで消えたもの)をタイルの並びと区画の順から外す。変わったときだけ保存する
+  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)をタイルの並び・色・グループの並びから外す。変わったときだけ保存する
   function pruneTagOrder() {
     var used = Object.create(null);
     bookmarks.forEach(function (b) { b.tags.forEach(function (t) { used[tagKey(t)] = true; }); });
     var kept = tagOrder.filter(function (k) { return used[k]; });
     if (kept.length !== tagOrder.length) {
       tagOrder = kept;
-      saveTagOrder();
+      if (!syncingFromStorage) saveTagOrder();
     }
     Object.keys(tagColors).forEach(function (k) {
-      if (!used[k]) { delete tagColors[k]; saveTagColors(); }
+      if (!used[k]) { delete tagColors[k]; if (!syncingFromStorage) saveTagColors(); }
     });
-    var keptGroups = groupOrder.filter(function (k) { return used[k]; });
+    var usedGroups = Object.create(null);
+    bookmarks.forEach(function (b) { b.groups.forEach(function (g) { usedGroups[tagKey(g)] = true; }); });
+    var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
-      saveGroupOrder();
+      if (!syncingFromStorage) saveGroupOrder();
     }
   }
 
   function countUntagged() {
     return bookmarks.filter(function (b) { return b.tags.length === 0; }).length;
+  }
+
+  /* ---------- グループ(ブックマークに複数所属できる。比較・表記の統一・追加は、タグと同じ規則) ---------- */
+
+  // groups が配列なら、文字列だけを整えて返す(空・比較で同じ重複は入れない)。配列でなければ空
+  function normalizeGroups(raw) {
+    var out = [];
+    if (Array.isArray(raw)) raw.forEach(function (g) { if (typeof g === 'string') addTagTo(out, g); });
+    return out;
+  }
+
+  // 比較で同じグループの表記を、配列の先頭に近い要素で最初に現れたものに揃える
+  function unifyGroupNames(list) {
+    var names = Object.create(null);
+    list.forEach(function (b) {
+      b.groups.forEach(function (g) { if (!(tagKey(g) in names)) names[tagKey(g)] = g; });
+    });
+    list.forEach(function (b) {
+      b.groups = b.groups.map(function (g) { return names[tagKey(g)]; });
+    });
+  }
+
+  // 全ブックマークで数えたグループの一覧。並び(groupOrder)にあるものを先に、残りは名前順。検索・絞り込みでは変わらない。
+  function getGroups() {
+    var map = Object.create(null);
+    bookmarks.forEach(function (b) {
+      b.groups.forEach(function (g) {
+        var k = tagKey(g);
+        if (!map[k]) map[k] = { key: k, name: g, count: 0 };
+        map[k].count++;
+      });
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
+      var ia = groupOrder.indexOf(a.key);
+      var ib = groupOrder.indexOf(b.key);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.key.localeCompare(b.key, 'ja');
+    });
+  }
+
+  function countUngrouped() {
+    return bookmarks.filter(function (b) { return b.groups.length === 0; }).length;
+  }
+
+  // 入力したグループ名を、既存のグループがあればその表記に合わせる(同じグループが別の表記で並ばないように)
+  function canonicalGroup(name) {
+    var k = tagKey(name.trim());
+    var existing = getGroups().filter(function (g) { return g.key === k; })[0];
+    return existing ? existing.name : name.trim();
+  }
+
+  // key のグループに所属するか。key が '' なら、どのグループにも所属しない(「グループなし」)
+  function inGroup(b, key) {
+    return key === '' ? b.groups.length === 0 : b.groups.some(function (g) { return tagKey(g) === key; });
   }
 
   // 入力したタグ名を、既存のタグがあればその表記に合わせる(同じタグが別の表記で並ばないように)
@@ -1576,7 +1699,8 @@
     return bookmarks.filter(function (b) {
       if (state.filterUntagged && b.tags.length !== 0) return false;
       if (state.filterTag !== null && !hasTag(b.tags, state.filterTag)) return false;
-      var hay = (b.title + ' ' + (b.memo || '') + ' ' + b.tags.join(' ')).toLowerCase();
+      if (state.filterGroup !== null && !inGroup(b, state.filterGroup)) return false;
+      var hay = (b.title + ' ' + (b.memo || '') + ' ' + b.tags.join(' ') + ' ' + b.groups.join(' ')).toLowerCase();
       return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
     });
   }
@@ -1588,6 +1712,8 @@
     // 絞り込み中のタグが無くなった(改名・削除・統合・編集で消えた)ら、絞り込みを外す
     if (state.filterTag !== null && !getTags().some(function (t) { return t.key === state.filterTag; })) state.filterTag = null;
     if (state.filterUntagged && countUntagged() === 0) state.filterUntagged = false;
+    // 絞り込み中のグループが無くなった(改名・削除・統合・編集で消えた)ら、絞り込みを外す
+    if (state.filterGroup === '' ? countUngrouped() === 0 : state.filterGroup !== null && !getGroups().some(function (g) { return g.key === state.filterGroup; })) state.filterGroup = null;
     // 編集中のブックマークが、絞り込み・検索で見えなくなった場合、見えない編集フォームを破棄する
     var visibleIds = getFiltered().map(function (b) { return b.id; });
     if (state.editingId !== null && visibleIds.indexOf(state.editingId) === -1) state.editingId = null;
@@ -1596,9 +1722,11 @@
     renderTopSites();
     renderRecentSites();
     renderTagBar();
+    renderGroupPopover();
     renderList();
     renderDetail();
     addTagPicker.refresh();
+    addGroupPicker.refresh();
     if (!tagManageOverlay.hidden) renderTagManageModal(); // モーダルが開いている間は常に最新の件数を反映する
 
     syncHeaderHeight();
@@ -1618,7 +1746,12 @@
 
   // chipsEl に選択中のタグ、suggestEl に既存のタグの候補を出す。タグは Enter・半角カンマ・全角カンマ・読点で確定する。
   // onManual は、ユーザーが手でタグを追加・外したときに呼ばれる(追加フォームの自動タグ付けを止めるため)。
-  function createTagPicker(chipsEl, suggestEl, textEl, onManual) {
+  // 入力する「名前の種類」。タグとグループは、候補(既存の一覧)と、表記の合わせ方だけが違う。省略時はタグ
+  var TAG_SOURCE = { names: getTags, canonical: canonicalTag };
+  var GROUP_SOURCE = { names: getGroups, canonical: canonicalGroup };
+
+  function createTagPicker(chipsEl, suggestEl, textEl, onManual, source) {
+    var src = source || TAG_SOURCE;
     var picker = { tags: [], showAll: false };
     var draggedChipKey = null; // ドラッグ中のチップのタグのキー
 
@@ -1652,7 +1785,7 @@
         });
       });
       var typed = textEl.value.trim().toLowerCase();
-      var list = getTags().filter(function (t) {
+      var list = src.names().filter(function (t) {
         return !hasTag(picker.tags, t.name) && (!typed || t.key.indexOf(typed) !== -1);
       });
       // 入力が空のときは、先頭の SUGGEST_MAX 件だけ出して、残りは「他 N 件を表示」で出す
@@ -1669,7 +1802,7 @@
     // 追加できたら true(空・重複は追加しない)
     function add(name) {
       var before = picker.tags.length;
-      addTagTo(picker.tags, canonicalTag(name));
+      addTagTo(picker.tags, src.canonical(name));
       return picker.tags.length !== before;
     }
 
@@ -1862,32 +1995,98 @@
     if (again) again.focus();
   });
 
-  // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(タグの絞り込み中は有効)
+  // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(グループ・タグの絞り込み中は有効)
   function canReorder() {
     return getSearchTokens().length === 0;
   }
 
-  // タグごとの区画。区画の順はタグ管理で決めた順(getGroupTags)。各行は、付いているすべてのタグの区画に出す(重複して出る)。タグなしは最後。
-  // タグで絞り込み中は、そのタグの区画だけになる。
+  // グループごとの区画。区画の順はグループ管理で決めた順(getGroups)。各行は、所属するすべてのグループの区画に出す(重複して出る)。グループなしは最後。
+  // グループで絞り込み中は、そのグループの区画だけになる。
   function groupItems(items) {
-    var groups = [];
-    getGroupTags().forEach(function (t) {
-      if (state.filterTag !== null && t.key !== state.filterTag) return;
-      var members = items.filter(function (b) { return hasTag(b.tags, t.name); });
-      if (members.length) groups.push({ key: t.key, name: t.name, items: members });
+    var sections = [];
+    getGroups().forEach(function (g) {
+      if (state.filterGroup !== null && g.key !== state.filterGroup) return;
+      var members = items.filter(function (b) { return inGroup(b, g.key); });
+      if (members.length) sections.push({ key: g.key, name: g.name, items: members });
     });
-    var untagged = items.filter(function (b) { return b.tags.length === 0; });
-    if (untagged.length) groups.push({ key: '', name: 'タグなし', items: untagged });
-    return groups;
+    if (state.filterGroup === null || state.filterGroup === '') {
+      var ungrouped = items.filter(function (b) { return inGroup(b, ''); });
+      if (ungrouped.length) sections.push({ key: '', name: 'グループなし', items: ungrouped });
+    }
+    return sections;
   }
 
-  // タグの絞り込み(「タグなし」を含む)を外す。検索語は残る。
+  // 絞り込み(タグ・「タグなし」・グループ)を外す。検索語は残る。
   function clearFilter() {
     state.filterTag = null;
     state.filterUntagged = false;
+    state.filterGroup = null;
     render();
   }
   document.getElementById('filter-clear-btn').addEventListener('click', clearFilter);
+
+  /* ---------- グループの絞り込みのパネル ---------- */
+
+  var groupFilterBtn = document.getElementById('group-filter-btn');
+  var groupPopover = document.getElementById('group-popover');
+
+  // 「すべて」と各グループ(件数付き)、1 行 1 つ。「グループなし」は、該当があるときだけ。件数は全ブックマークで数える
+  function renderGroupPopover() {
+    var rows = [{ attr: 'data-group-all="1"', name: 'すべて', count: bookmarks.length, on: state.filterGroup === null }];
+    getGroups().forEach(function (g) {
+      rows.push({ attr: 'data-group-filter="' + escapeHtml(g.key) + '"', name: g.name, count: g.count, on: state.filterGroup === g.key });
+    });
+    var ungrouped = countUngrouped();
+    if (ungrouped) rows.push({ attr: 'data-group-filter=""', name: 'グループなし', count: ungrouped, on: state.filterGroup === '' });
+    groupPopover.innerHTML = rows.map(function (r) {
+      return '<button type="button" class="group-row" ' + r.attr + ' aria-pressed="' + r.on + '">' +
+        '<span class="group-row-name">' + escapeHtml(r.name) + '</span><span class="group-row-count">' + r.count + '</span></button>';
+    }).join('');
+
+    // ボタンの文字は、絞り込み中なら「グループ: ○○」(長いときは省略。全文は title)
+    var label = 'グループ';
+    if (state.filterGroup !== null) {
+      var cur = getGroups().filter(function (g) { return g.key === state.filterGroup; })[0];
+      label = 'グループ: ' + (state.filterGroup === '' ? 'グループなし' : cur ? cur.name : state.filterGroup);
+    }
+    groupFilterBtn.textContent = label;
+    groupFilterBtn.title = label;
+    groupFilterBtn.classList.toggle('active', state.filterGroup !== null);
+  }
+
+  function openGroupPopover() {
+    groupPopover.hidden = false;
+    groupFilterBtn.setAttribute('aria-expanded', 'true');
+  }
+
+  function closeGroupPopover() {
+    groupPopover.hidden = true;
+    groupFilterBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  groupFilterBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (groupPopover.hidden) openGroupPopover(); else closeGroupPopover();
+  });
+
+  // 選んだら、絞り込んでパネルを閉じる。もう一度同じグループを選ぶと、絞り込みが外れる
+  groupPopover.addEventListener('click', function (e) {
+    var row = e.target.closest('.group-row');
+    if (!row) return;
+    if (row.hasAttribute('data-group-all')) state.filterGroup = null;
+    else {
+      var key = row.getAttribute('data-group-filter');
+      state.filterGroup = state.filterGroup === key ? null : key;
+    }
+    closeGroupPopover();
+    render();
+    groupFilterBtn.focus();
+  });
+
+  // パネルの外を押したら閉じる
+  document.addEventListener('click', function (e) {
+    if (!groupPopover.hidden && !groupPopover.contains(e.target) && e.target !== groupFilterBtn) closeGroupPopover();
+  });
 
   // 編集を始める。行は複数の区画に出て、編集フォームは最初に出る1か所なので、押した場所から離れることがある。フォームを見える位置へ動かす
   function startEdit(id) {
@@ -1903,17 +2102,22 @@
     var items = sortItems(getFiltered());
     var reorderable = canReorder();
 
-    // 絞り込み中は、件数表示の行に、どのタグで絞っているかと「解除 ×」を出す
-    var filtering = state.filterTag !== null || state.filterUntagged;
-    var filterName = '';
+    // 絞り込み中は、件数表示の行に、どのグループ・タグで絞っているかと「解除 ×」を出す
+    var filtering = state.filterTag !== null || state.filterUntagged || state.filterGroup !== null;
+    var filterParts = [];
+    if (state.filterGroup !== null) {
+      var filterGroupInfo = getGroups().filter(function (g) { return g.key === state.filterGroup; })[0];
+      filterParts.push('グループ: ' + (state.filterGroup === '' ? 'グループなし' : filterGroupInfo ? filterGroupInfo.name : state.filterGroup));
+    }
     if (state.filterUntagged) {
-      filterName = 'タグなし';
+      filterParts.push('タグ: タグなし');
     } else if (state.filterTag !== null) {
       var filterTagInfo = getTags().filter(function (t) { return t.key === state.filterTag; })[0];
-      filterName = filterTagInfo ? filterTagInfo.name : state.filterTag;
+      filterParts.push('タグ: ' + (filterTagInfo ? filterTagInfo.name : state.filterTag));
     }
+    var filterLabel = filterParts.join(' / ');
     document.getElementById('filter-status').hidden = !filtering;
-    document.getElementById('filter-status-text').textContent = filtering ? 'タグ: ' + filterName + ' で絞り込み中' : '';
+    document.getElementById('filter-status-text').textContent = filtering ? filterLabel + ' で絞り込み中' : '';
 
     document.getElementById('result-count').textContent =
       items.length + ' 件表示中(全 ' + bookmarks.length + ' 件)' +
@@ -1937,10 +2141,10 @@
         }).join('')
       : bookmarks.length
         ? (filtering && getSearchTokens().length > 0
-            // タグで絞り込んだまま検索して0件のとき。絞り込みが原因と分かるよう、専用のメッセージと解除ボタンを出す
-            ? '<div class="search-no-results">' + escapeHtml((state.filterUntagged ? 'タグ: タグなし' : 'タグ ' + filterName) + ' の中に該当がありません。') +
+            // グループ・タグで絞り込んだまま検索して0件のとき。絞り込みが原因と分かるよう、専用のメッセージと解除ボタンを出す
+            ? '<div class="search-no-results">' + escapeHtml(filterLabel + ' の中に該当がありません。') +
               ' <button type="button" class="btn-quiet" data-action="clear-filter">解除して全件から検索</button></div>'
-            : '<div class="search-no-results">条件に一致するブックマークがありません。タグの選択か検索をクリアしてください。</div>')
+            : '<div class="search-no-results">条件に一致するブックマークがありません。絞り込みか検索をクリアしてください。</div>')
         : '<div class="search-no-results">ブックマークがありません。「+ 追加」から登録してください。</div>';
     var clearFilterBtn = container.querySelector('[data-action="clear-filter"]');
     if (clearFilterBtn) clearFilterBtn.addEventListener('click', clearFilter);
@@ -2009,6 +2213,7 @@
 
   function openTagManageModal() {
     if (!autoTagOverlay.hidden) return; // 自動タグ付けモーダルと同時には開かない
+    state.manageTab = 'tag';
     tagManageOverlay.hidden = false;
     renderTagManageModal();
     var firstBtn = tagManageList.querySelector('button');
@@ -2026,48 +2231,82 @@
   }
 
   // タグ管理モーダルのリスト全体を再描画する。render()から、モーダルが開いている間だけ呼ばれる。
+  // 「タグ」「グループ」の 2 つのタブ(state.manageTab)。タグのタブは、改名・削除・色。グループのタブは、改名・削除・並べ替え(色は持たない)。
+  // 行・ボタンのデータ属性と data-action の名前は、2 つのタブで共通。どちらの操作かは state.manageTab で振り分ける。
   function renderTagManageModal() {
-    var tags = getGroupTags();
-    tagManageEmpty.hidden = tags.length !== 0;
-    tagManageList.innerHTML = tags.map(function (t, i) { return renderTagManageRow(t, i, tags.length); }).join('');
+    var isGroup = state.manageTab === 'group';
+    var items = isGroup ? getGroups() : getTags();
+    Array.prototype.forEach.call(document.querySelectorAll('[data-manage-tab]'), function (tab) {
+      tab.setAttribute('aria-selected', String(tab.getAttribute('data-manage-tab') === state.manageTab));
+    });
+    document.getElementById('tag-manage-hint').textContent = isGroup
+      ? '既存のグループ名に改名すると、2つのグループが統合されます。改名は、影響を確認してから適用します。グループを削除しても、ブックマークは残ります。'
+      : '既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。';
+    tagManageEmpty.textContent = isGroup
+      ? 'グループがありません。ブックマークにグループを付けると、ここに表示されます。'
+      : 'タグがありません。ブックマークにタグを付けると、ここに表示されます。';
+    tagManageEmpty.hidden = items.length !== 0;
+    tagManageList.innerHTML = items.map(function (t, i) { return isGroup ? renderGroupManageRow(t, i, items.length) : renderTagManageRow(t); }).join('');
     Array.prototype.forEach.call(tagManageList.querySelectorAll('.tag-manage-row[draggable]'), function (row) {
       bindDragReorder(row, row.getAttribute('data-tag'), {
-        getDragged: function () { return draggedGroupTagKey; },
-        setDragged: function (v) { draggedGroupTagKey = v; },
+        getDragged: function () { return draggedGroupKey; },
+        setDragged: function (v) { draggedGroupKey = v; },
         dropEffect: 'move',
-        onDrop: moveGroupTag
+        onDrop: moveGroup
       });
     });
   }
 
-  function renderTagManageRow(t, index, total) {
+  // 改名の入力の行(タグ・グループ共通)
+  function renderRenameFormRow(key, name) {
+    return '<li class="tag-manage-row" data-tag="' + escapeHtml(key) + '">' +
+      '<form class="tag-rename-form" data-tag-rename-form data-tag="' + escapeHtml(key) + '">' +
+        '<input type="text" class="tag-rename-input" name="tagName" value="' + (state.renameDraft !== null ? escapeHtml(state.renameDraft) : escapeHtml(name)) + '" autocomplete="off">' +
+        '<button type="submit" class="btn btn-amber">保存</button>' +
+        '<button type="button" class="btn-quiet" data-action="cancel-tag-edit">キャンセル</button>' +
+      '</form>' +
+    '</li>';
+  }
+
+  // 改名・削除のボタン(削除の確認の段階では、「削除する」「キャンセル」)
+  function manageActionButtons(t) {
     var key = escapeHtml(t.key);
     var name = escapeHtml(t.name);
-    if (state.confirmRename === t.key) return renderRenameConfirmRow(t);
-    if (state.editingTag === t.key) {
-      return '<li class="tag-manage-row" data-tag="' + key + '">' +
-        '<form class="tag-rename-form" data-tag-rename-form data-tag="' + key + '">' +
-          '<input type="text" class="tag-rename-input" name="tagName" value="' + (state.renameDraft !== null ? escapeHtml(state.renameDraft) : name) + '" autocomplete="off">' +
-          '<button type="submit" class="btn btn-amber">保存</button>' +
-          '<button type="button" class="btn-quiet" data-action="cancel-tag-edit">キャンセル</button>' +
-        '</form>' +
-      '</li>';
-    }
-    var buttons = state.confirmDeleteTag === t.key
+    return state.confirmDeleteTag === t.key
       ? '<button type="button" class="btn-danger" data-action="confirm-delete-tag" data-tag="' + key + '">削除する</button>' +
         '<button type="button" class="btn-quiet" data-action="cancel-tag-edit">キャンセル</button>'
       : '<button type="button" class="btn-quiet" data-action="edit-tag" data-tag="' + key + '" aria-label="' + name + 'の名前を変更">改名</button>' +
         '<button type="button" class="btn-danger" data-action="delete-tag" data-tag="' + key + '" aria-label="' + name + 'を削除">削除</button>';
-    var picking = state.colorEditing === t.key; // 色を選んでいる間は、スライダーを動かせるよう、行のドラッグを止める
-    return '<li class="tag-manage-row" data-tag="' + key + '"' + (picking ? '' : ' draggable="true"') + '>' +
-      '<span class="row-grip" aria-hidden="true">⠿</span>' +
+  }
+
+  function renderTagManageRow(t) {
+    var key = escapeHtml(t.key);
+    var name = escapeHtml(t.name);
+    if (state.confirmRename === t.key) return renderRenameConfirmRow(t);
+    if (state.editingTag === t.key) return renderRenameFormRow(t.key, t.name);
+    var picking = state.colorEditing === t.key;
+    return '<li class="tag-manage-row" data-tag="' + key + '">' +
       '<button type="button" class="tag-color-btn" data-action="toggle-tag-color" data-tag="' + key + '" style="--h:' + tagHue(t.key) + '" aria-label="' + name + 'の色を選ぶ" aria-expanded="' + picking + '"></button>' +
       '<span class="tag-manage-name">' + name + '</span>' +
       '<span class="tag-manage-count">' + t.count + '</span>' +
+      manageActionButtons(t) +
+      (picking ? renderTagColorPicker(t) : '') +
+    '</li>';
+  }
+
+  // グループの行: グリップ(ドラッグで並べ替え)・名前・件数・▲▼・改名・削除。色は持たない
+  function renderGroupManageRow(g, index, total) {
+    var key = escapeHtml(g.key);
+    var name = escapeHtml(g.name);
+    if (state.confirmRename === g.key) return renderRenameConfirmRow(g);
+    if (state.editingTag === g.key) return renderRenameFormRow(g.key, g.name);
+    return '<li class="tag-manage-row" data-tag="' + key + '" draggable="true">' +
+      '<span class="row-grip" aria-hidden="true">⠿</span>' +
+      '<span class="tag-manage-name">' + name + '</span>' +
+      '<span class="tag-manage-count">' + g.count + '</span>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-up" data-tag="' + key + '" aria-label="' + name + 'を上へ"' + (index === 0 ? ' disabled' : '') + '>▲</button>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-down" data-tag="' + key + '" aria-label="' + name + 'を下へ"' + (index === total - 1 ? ' disabled' : '') + '>▼</button>' +
-      buttons +
-      (picking ? renderTagColorPicker(t) : '') +
+      manageActionButtons(g) +
     '</li>';
   }
 
@@ -2087,22 +2326,37 @@
 
   // 改名の影響の確認。改名前のタグ名・新しい名前・影響するブックマークの件数とタイトル(最大5件)・統合になるかを見せる。
   function renderRenameConfirmRow(t) {
+    var isGroup = state.manageTab === 'group';
+    var noun = isGroup ? 'グループ' : 'タグ';
     var newName = state.renameDraft;
     var newKey = tagKey(newName);
-    var merged = getTags().filter(function (x) { return x.key === newKey && x.key !== t.key; })[0];
-    var affected = bookmarks.filter(function (b) { return hasTag(b.tags, t.name); });
+    var merged = (isGroup ? getGroups() : getTags()).filter(function (x) { return x.key === newKey && x.key !== t.key; })[0];
+    var affected = bookmarks.filter(function (b) { return hasTag(isGroup ? b.groups : b.tags, t.name); });
     var items = affected.slice(0, 5).map(function (b) { return '<li>' + escapeHtml(b.title) + '</li>'; }).join('') +
       (affected.length > 5 ? '<li>ほか ' + (affected.length - 5) + ' 件</li>' : '');
     var key = escapeHtml(t.key);
     return '<li class="tag-manage-row tag-manage-confirm" data-tag="' + key + '">' +
       '<span>「' + escapeHtml(t.name) + '」を「' + escapeHtml(newName) + '」に変更します。' + affected.length + ' 件のブックマークが変わります。</span>' +
-      (merged ? '<span class="tag-confirm-merge">「' + escapeHtml(merged.name) + '」は既存のタグです。統合され、1つのタグになります。</span>' : '') +
+      (merged ? '<span class="tag-confirm-merge">「' + escapeHtml(merged.name) + '」は既存の' + noun + 'です。統合され、1つの' + noun + 'になります。</span>' : '') +
       '<ul class="tag-confirm-titles">' + items + '</ul>' +
       '<div class="tag-confirm-actions">' +
         '<button type="button" class="btn btn-amber" data-action="apply-rename" data-tag="' + key + '">適用</button>' +
         '<button type="button" class="btn-quiet" data-action="cancel-rename">キャンセル</button>' +
       '</div></li>';
   }
+
+  // タブを替える。行内の改名・削除・色の途中の状態は、キーが別物(タグとグループ)なので、持ち越さない
+  document.querySelector('.manage-tabs').addEventListener('click', function (e) {
+    var tab = e.target.closest('[data-manage-tab]');
+    if (!tab) return;
+    state.manageTab = tab.getAttribute('data-manage-tab');
+    state.editingTag = null;
+    state.confirmDeleteTag = null;
+    state.confirmRename = null;
+    state.renameDraft = null;
+    state.colorEditing = null;
+    renderTagManageModal();
+  });
 
   tagManageList.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-action]');
@@ -2127,10 +2381,10 @@
     } else if (action === 'cancel-rename') {
       state.confirmRename = null; // 入力に戻る(入力した名前は残す)
     } else if (action === 'apply-rename') {
-      renameTag(key, state.renameDraft);
+      if (state.manageTab === 'group') renameGroup(key, state.renameDraft); else renameTag(key, state.renameDraft);
       return;
     } else if (action === 'confirm-delete-tag') {
-      deleteTag(key);
+      if (state.manageTab === 'group') deleteGroup(key); else deleteTag(key);
       return;
     } else if (action === 'toggle-tag-color') {
       state.colorEditing = state.colorEditing === key ? null : key;
@@ -2146,7 +2400,7 @@
       if (again) again.focus();
       return;
     } else if (action === 'move-tag-up' || action === 'move-tag-down') {
-      shiftGroupTag(key, action === 'move-tag-up' ? -1 : 1);
+      shiftGroup(key, action === 'move-tag-up' ? -1 : 1);
       // 再描画でボタンが替わるため、同じボタンへフォーカスを戻す(端で無効になったら反対側へ)
       var row = Array.prototype.filter.call(tagManageList.querySelectorAll('.tag-manage-row'), function (r) { return r.getAttribute('data-tag') === key; })[0];
       var same = row && row.querySelector('[data-action="' + action + '"]');
@@ -2181,7 +2435,7 @@
     var oldKey = form.getAttribute('data-tag');
     var newName = form.tagName.value.trim();
     if (!renameTarget(oldKey, newName)) {
-      renameTag(oldKey, newName); // 何も変えずに入力を閉じる
+      if (state.manageTab === 'group') renameGroup(oldKey, newName); else renameTag(oldKey, newName); // 何も変えずに入力を閉じる
       return;
     }
     state.renameDraft = newName; // すぐには適用せず、影響を確認する段階へ
@@ -2190,9 +2444,9 @@
     tagManageList.querySelector('[data-action="apply-rename"]').focus(); // 再描画で消えた「保存」の代わりに、確認の「適用」へ
   });
 
-  // 改名として実際に変わるなら、改名前のタグ(getTags の要素)を返す。空・元と同じ名前・存在しないタグなら null。
+  // 改名として実際に変わるなら、改名前のタグ(グループのタブでは、グループ)の要素(getTags/getGroups の要素)を返す。空・元と同じ名前・存在しないものなら null。
   function renameTarget(oldKey, newName) {
-    var current = getTags().filter(function (t) { return t.key === oldKey; })[0];
+    var current = (state.manageTab === 'group' ? getGroups() : getTags()).filter(function (t) { return t.key === oldKey; })[0];
     return current && newName && newName !== current.name ? current : null;
   }
 
@@ -2218,8 +2472,6 @@
     if (state.filterTag === oldKey) state.filterTag = newKey; // 絞り込みは新しい名前へ引き継ぐ
     tagOrder = sanitizeTagOrder(tagOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
     saveTagOrder();
-    groupOrder = sanitizeTagOrder(groupOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 区画の順も同じく引き継ぐ
-    saveGroupOrder();
     if (newKey !== oldKey && tagColors[oldKey] !== undefined) { // 色も新しい名前へ引き継ぐ(統合のときは、既存のタグの色を優先する)
       if (tagColors[newKey] === undefined) tagColors[newKey] = tagColors[oldKey];
       delete tagColors[oldKey];
@@ -2240,6 +2492,46 @@
     addTagPicker.tags = addTagPicker.tags.filter(function (t) { return tagKey(t) !== key; });
     saveData(bookmarks);
     render(); // 絞り込み中のタグが消えていれば、render() が絞り込みを外す
+  }
+
+  // oldKey のグループを newName に改名する。別の既存のグループ(比較で同じもの)の名前なら統合になり、表記は既存のものに合わせる。
+  // 空・元と同じ名前なら何も変えない。確認の段階は呼び出し側(適用ボタン)で済ませてある。同名のタグには触れない。
+  function renameGroup(oldKey, newName) {
+    newName = newName.trim();
+    state.editingTag = null;
+    state.confirmRename = null;
+    state.renameDraft = null;
+    if (!renameTarget(oldKey, newName)) {
+      renderTagManageModal();
+      return;
+    }
+    var newKey = tagKey(newName);
+    var merged = getGroups().filter(function (g) { return g.key === newKey && g.key !== oldKey; })[0];
+    var finalName = merged ? merged.name : newName;
+    bookmarks.forEach(function (b) {
+      var out = [];
+      b.groups.forEach(function (g) { addTagTo(out, tagKey(g) === oldKey ? finalName : g); });
+      b.groups = out;
+    });
+    if (state.filterGroup === oldKey) state.filterGroup = newKey; // 絞り込みは新しい名前へ引き継ぐ
+    groupOrder = sanitizeTagOrder(groupOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
+    saveGroupOrder();
+    var formGroups = [];
+    addGroupPicker.tags.forEach(function (g) { addTagTo(formGroups, tagKey(g) === oldKey ? finalName : g); });
+    addGroupPicker.tags = formGroups;
+    saveData(bookmarks);
+    render();
+  }
+
+  // key のグループを、全ブックマークから外す。ブックマークは残る
+  function deleteGroup(key) {
+    state.confirmDeleteTag = null;
+    bookmarks.forEach(function (b) {
+      b.groups = b.groups.filter(function (g) { return tagKey(g) !== key; });
+    });
+    addGroupPicker.tags = addGroupPicker.tags.filter(function (g) { return tagKey(g) !== key; });
+    saveData(bookmarks);
+    render(); // 絞り込み中のグループが消えていれば、render() が絞り込みを外す
   }
 
   // ドラッグ&ドロップによる並べ替えの共通処理。
@@ -2293,7 +2585,7 @@
   var draggedCardId = null;
   var draggedGroup = null; // ドラッグ中の行がある区画のキー
   var draggedTagKey = null;
-  var draggedGroupTagKey = null; // タグ管理でドラッグ中のタグのキー
+  var draggedGroupKey = null; // グループ管理でドラッグ中のグループのキー
 
   // targetKey のタグの直前(after=false)または直後(after=true)に draggedKey のタグを移動する。いまの表示順を、そのまま手動の並びにする。
   function moveTag(draggedKey, targetKey, after) {
@@ -2306,9 +2598,9 @@
     render();
   }
 
-  // targetKey のタグの直前(after=false)または直後(after=true)に draggedKey のタグを移動する。いまの区画の順を、そのまま保存する。
-  function moveGroupTag(draggedKey, targetKey, after) {
-    var keys = getGroupTags().map(function (t) { return t.key; });
+  // targetKey のグループの直前(after=false)または直後(after=true)に draggedKey のグループを移動する。いまの区画の順を、そのまま保存する。
+  function moveGroup(draggedKey, targetKey, after) {
+    var keys = getGroups().map(function (g) { return g.key; });
     if (draggedKey === targetKey || keys.indexOf(draggedKey) === -1 || keys.indexOf(targetKey) === -1) return;
     keys.splice(keys.indexOf(draggedKey), 1);
     keys.splice(keys.indexOf(targetKey) + (after ? 1 : 0), 0, draggedKey);
@@ -2317,15 +2609,15 @@
     render();
   }
 
-  // key のタグを区画の順で delta(-1 で上、1 で下)だけ動かす。端なら何もしない。
-  function shiftGroupTag(key, delta) {
-    var keys = getGroupTags().map(function (t) { return t.key; });
+  // key のグループを区画の順で delta(-1 で上、1 で下)だけ動かす。端なら何もしない。
+  function shiftGroup(key, delta) {
+    var keys = getGroups().map(function (g) { return g.key; });
     var j = keys.indexOf(key) + delta;
     if (j < 0 || j >= keys.length) return;
-    moveGroupTag(key, keys[j], delta > 0);
+    moveGroup(key, keys[j], delta > 0);
   }
 
-  // group は、タグごとの表示での区画のキー(タグなしは '')。その区画の中だけで並べ替えられる。
+  // group は、区画(グループ)のキー(グループなしは '')。その区画の中だけで並べ替えられる。
   function bindDragEvents(card, b, group) {
     card.setAttribute('draggable', 'true');
     bindDragReorder(card, b.id, {
@@ -2338,7 +2630,7 @@
   }
 
   // targetId の直前(after=false)または直後(after=true)に draggedId のブックマークを移動する。
-  // タグの絞り込み中は表示が一部なので、全体の並びでは移動先の隣に入れる。表示中の相対順は、ドロップした位置のとおりになる。
+  // グループ・タグの絞り込み中は表示が一部なので、全体の並びでは移動先の隣に入れる。表示中の相対順は、ドロップした位置のとおりになる。
   function moveBookmark(draggedId, targetId, after) {
     if (!draggedId || draggedId === targetId) return;
     var dragged = bookmarks.find(function (x) { return x.id === draggedId; });
@@ -2508,6 +2800,7 @@
       '<dl>' +
         '<div><dt>URL</dt><dd class="mono">' + escapeHtml(b.url) + '</dd></div>' +
         (b.memo ? '<div><dt>メモ</dt><dd>' + highlightText(b.memo, tokens) + '</dd></div>' : '') +
+        (b.groups.length ? '<div><dt>グループ</dt><dd>' + b.groups.map(escapeHtml).join(' / ') + '</dd></div>' : '') +
         (b.tags.length ? '<div><dt>タグ</dt><dd>' + b.tags.map(function (t) { return highlightText(t, tokens); }).join(' / ') + '</dd></div>' : '') +
         (b.loginId ? '<div><dt>ログインID</dt><dd class="mono">' + escapeHtml(b.loginId) + copyBtn('copy-login-id') + '</dd></div>' : '') +
         (b.loginPassword ? '<div><dt>パスワード</dt><dd class="mono">●●●●●●●●' + copyBtn('copy-login-password') + '</dd></div>' : '') +
@@ -2535,6 +2828,7 @@
             '<div class="field"><label for="edit-url">URL</label><input id="edit-url" type="text" name="url" value="' + escapeHtml(d.url) + '" required></div>' +
             '<div class="field"><label for="edit-title">タイトル</label><input id="edit-title" type="text" name="title" value="' + escapeHtml(d.title) + '" required></div>' +
             '<div class="field"><label for="edit-tag-text">タグ(Enter かカンマで確定)</label><div class="chip-list" id="edit-tag-chips"></div><input id="edit-tag-text" type="text" placeholder="タグを入力" autocomplete="off"><div class="chip-list" id="edit-tag-suggest"></div></div>' +
+            '<div class="field"><label for="edit-group-text">グループ(Enter かカンマで確定)</label><div class="chip-list" id="edit-group-chips"></div><input id="edit-group-text" type="text" placeholder="グループを入力" autocomplete="off"><div class="chip-list" id="edit-group-suggest"></div></div>' +
             '<div class="field"><label for="edit-login-id">ログインID</label><input id="edit-login-id" type="text" name="loginId" value="' + escapeHtml(d.loginId) + '"></div>' +
             '<div class="field">' +
               '<label for="edit-login-password">パスワード</label>' +
@@ -2562,7 +2856,7 @@
     function saveDraft() {
       state.editDraft = {
         id: b.id, url: form.url.value, title: form.title.value, loginId: form.loginId.value,
-        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice()
+        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice(), groups: groupPicker.tags.slice()
       };
     }
     var picker = createTagPicker(
@@ -2571,7 +2865,16 @@
       document.getElementById('edit-tag-text'),
       saveDraft
     );
-    picker.set(state.editDraft && state.editDraft.id === b.id ? state.editDraft.tags : b.tags);
+    var groupPicker = createTagPicker(
+      document.getElementById('edit-group-chips'),
+      document.getElementById('edit-group-suggest'),
+      document.getElementById('edit-group-text'),
+      saveDraft,
+      GROUP_SOURCE
+    );
+    var hasDraft = state.editDraft && state.editDraft.id === b.id;
+    picker.set(hasDraft ? state.editDraft.tags : b.tags);
+    groupPicker.set(hasDraft ? state.editDraft.groups : b.groups);
     form.addEventListener('input', saveDraft);
 
     cancelBtn.addEventListener('click', function () {
@@ -2588,11 +2891,13 @@
         return;
       }
       picker.commit(); // 入力欄に残っている未確定のタグも含める
+      groupPicker.commit(); // グループも同じ
       b.url = url;
       b.scheme = scheme;
       b.domain = deriveDomain(url, scheme);
       b.title = form.title.value.trim() || deriveTentativeTitle(url, scheme);
       b.tags = picker.tags.slice();
+      b.groups = groupPicker.tags.slice();
       b.loginId = form.loginId.value.trim() || null;
       b.loginPassword = form.loginPassword.value || null;
       b.memo = form.memo.value.trim() ? form.memo.value : null;
@@ -2634,6 +2939,14 @@
     document.getElementById('new-tag-suggest'),
     document.getElementById('new-tag-text'),
     function () { addFormTagsManual = true; }
+  );
+  // グループは、自動では選ばない(タグの事前選択の対象外)
+  var addGroupPicker = createTagPicker(
+    document.getElementById('new-group-chips'),
+    document.getElementById('new-group-suggest'),
+    document.getElementById('new-group-text'),
+    function () {},
+    GROUP_SOURCE
   );
 
   // URL・タイトル・メモの入力に合わせて、含まれる既存のタグ名をすべて事前選択して見せる
@@ -2677,6 +2990,7 @@
     }
 
     addTagPicker.commit(); // 入力欄に残っている未確定のタグも含める
+    addGroupPicker.commit(); // グループも同じ
     var title = newTitleInput.value.trim() || deriveTentativeTitle(url, scheme);
     var domain = deriveDomain(url, scheme);
     var loginId = document.getElementById('new-login-id').value.trim() || null;
@@ -2688,6 +3002,7 @@
       url: url,
       title: title,
       tags: addTagPicker.tags.slice(),
+      groups: addGroupPicker.tags.slice(),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -2700,6 +3015,8 @@
     addForm.reset();
     addTagPicker.set([]);
     addTagPicker.showAll = false;
+    addGroupPicker.set([]);
+    addGroupPicker.showAll = false;
     addFormTagsManual = false;
     addPanel.hidden = true;
     render();
@@ -3016,7 +3333,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 2, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 3, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -3053,12 +3370,14 @@
         return;
       }
       var importedOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.tagOrder);
-      var importedGroupOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.groupOrder);
+      // groupOrder は、version 3 以降だけ、グループのキーとして読む(旧版の groupOrder は、タグごとの区画の順だった)
+      var importedGroupOrder = !Array.isArray(parsed) && parsed.version >= 3 ? sanitizeTagOrder(parsed.groupOrder) : [];
       var importedColors = sanitizeTagColors(Array.isArray(parsed) ? null : parsed.tagColors);
 
       var sanitized = list.map(sanitizeBookmark).filter(Boolean);
       sanitized.forEach(function (b, i) { b.order = i; });
       unifyTagNames(sanitized);
+      unifyGroupNames(sanitized);
       var skipped = list.length - sanitized.length;
       var message = '現在のブックマーク(' + bookmarks.length + ' 件)を、インポートするデータ(' + sanitized.length + ' 件' +
         (skipped ? '、URL不正のため ' + skipped + ' 件は除外' : '') + ')で置き換えます。よろしいですか?';
@@ -3098,11 +3417,17 @@
     toggleHelp();
   });
 
-  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → 自動タグ付け → タグ管理モーダル → 各種フォーム(編集・追加)。
+  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → グループのパネル → 自動タグ付け → タグ管理モーダル → 各種フォーム(編集・追加)。
   // フォームは2種をまとめて1段階として扱う(同時に開いていても1回のEscapeで閉じ切る)。閉じる層が何も無ければ、最後にフォーカスを外す。
   function closeTopmostLayer() {
     if (!helpPanel.hidden) {
       helpPanel.hidden = true;
+      return;
+    }
+
+    if (!groupPopover.hidden) {
+      closeGroupPopover();
+      groupFilterBtn.focus();
       return;
     }
 
@@ -3148,12 +3473,12 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return; // ブラウザ標準のショートカットを妨げない
 
     if (e.key === 'Escape') {
-      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden) {
+      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
         clearSearch();
         return;
       }
       // 検索欄が空で、タグで絞り込み中のときは、絞り込みを外す(キーボードだけで解除できるように)
-      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged) && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden) {
+      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged || state.filterGroup !== null) && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
         clearFilter();
         return;
       }
@@ -3178,10 +3503,11 @@
   window.addEventListener('storage', function (e) {
     if (e.key === STORAGE_KEY) bookmarks = loadData();
     else if (e.key === TAG_ORDER_KEY) tagOrder = loadTagOrder();
-    else if (e.key === GROUP_ORDER_KEY) { try { groupOrder = sanitizeTagOrder(JSON.parse(e.newValue)); } catch (err) { groupOrder = []; } }
+    else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
     else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
     else return;
-    render();
+    syncingFromStorage = true;
+    try { render(); } finally { syncingFromStorage = false; }
   });
 
   render();
