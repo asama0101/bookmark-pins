@@ -262,6 +262,41 @@ await open(page, []);
 check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));
 check('タグが 0 個のとき、タグ行の区画は隠れる', await page.$eval('#tag-section', (e) => e.hidden));
 
+// ===== グループ(データ層) =====
+async function importJson(p, obj) {
+  await p.evaluate(() => { window.confirm = () => true; });
+  await p.setInputFiles('#import-file', { name: 'x.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(obj)) });
+  await p.waitForTimeout(200);
+}
+const storedJson = (p, k) => p.evaluate((key) => JSON.parse(localStorage.getItem(key)), k);
+
+// 旧データ(groups なし)は読み込め、旧キーの値はグループの並びとして読まれず、削除される
+await open(page, [bm(0, { tags: ['t'] }), bm(1)]);
+await page.evaluate(() => localStorage.setItem('bookmarks_group_order', JSON.stringify(['t'])));
+await page.reload();
+check('旧キー bookmarks_group_order は削除される', (await page.evaluate(() => localStorage.getItem('bookmarks_group_order'))) === null);
+await add(page, 'G0');
+check('旧データを保存すると、groups は空の配列になる', JSON.stringify((await storedJson(page, 'bookmarks_data')).map((b) => b.groups)) === JSON.stringify([[], [], []]), (await storedJson(page, 'bookmarks_data')).map((b) => b.groups));
+
+// グループ名は、大文字小文字・前後の空白が違っても 1 つに統合される(インポートの検証を通す)
+await open(page, []);
+await importJson(page, { version: 3, bookmarks: [bm(0, { groups: ['Work', ' work ', 5, '', 'Home'] }), bm(1, { groups: ['WORK'] })], groupOrder: ['home', 'work'] });
+const imp = await storedJson(page, 'bookmarks_data');
+check('グループは大文字小文字・空白・非文字列を整え、表記を揃える', JSON.stringify(imp.map((b) => b.groups)) === JSON.stringify([['Work', 'Home'], ['Work']]), imp.map((b) => b.groups));
+check('v3 の groupOrder が保存される', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['home', 'work']));
+
+// v2 の groupOrder(旧: タグのキー)と、配列だけの旧式は、グループの並びとして読まない
+await importJson(page, { version: 2, bookmarks: [bm(0, { groups: ['a'] })], groupOrder: ['a'] });
+check('v2 の groupOrder は無視される', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify([]));
+await importJson(page, [bm(0)]);
+check('配列だけの旧式でも、groupOrder は空', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify([]));
+
+// エクスポートは version 3 で、groups と groupOrder を含む
+await open(page, [bm(0, { groups: ['g1'] })]);
+const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
+const exported = JSON.parse(await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8'));
+check('エクスポートは version 3 で groups を含む', exported.version === 3 && exported.bookmarks[0].groups[0] === 'g1' && Array.isArray(exported.groupOrder), exported);
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

@@ -1160,10 +1160,12 @@
       // 旧形式(グループ)のデータは、読み込み時にタグへ変換する(group → [group])。ディスクへは次の保存で反映される
       parsed.forEach(function (b) {
         b.tags = normalizeTags(b.tags, b.group);
+        b.groups = normalizeGroups(b.groups); // グループ(v3 から)。旧データには無いので、空になる
         delete b.group;
         delete b.groupOrder;
       });
       unifyTagNames(parsed);
+      unifyGroupNames(parsed);
 
       // 廃止したフィールドは読み込み時に捨てる。ディスクへは次の保存で反映される
       stripLegacyFields(parsed);
@@ -1213,14 +1215,17 @@
     localStorage.setItem(TAG_ORDER_KEY, JSON.stringify(tagOrder));
   }
 
-  // 「タグごと」表示の区画の順(タグのキーの配列)。タグのタイルの並び(tagOrder)とは別で、タグ管理で決める。無ければ空
-  var GROUP_ORDER_KEY = 'bookmarks_group_order';
-  var groupOrder = (function () {
-    try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUP_ORDER_KEY))); } catch (e) { return []; }
-  })();
+  // グループの並び(グループのキー(小文字)の配列)。タグのタイルの並び(tagOrder)とは別で、グループ管理で決める。無ければ空。
+  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す
+  var GROUPS_ORDER_KEY = 'bookmarks_groups_order';
+  try { localStorage.removeItem('bookmarks_group_order'); } catch (e) { /* 消せなくても起動は続ける */ }
+  function loadGroupOrder() {
+    try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUPS_ORDER_KEY))); } catch (e) { return []; }
+  }
+  var groupOrder = loadGroupOrder();
 
   function saveGroupOrder() {
-    localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(groupOrder));
+    localStorage.setItem(GROUPS_ORDER_KEY, JSON.stringify(groupOrder));
   }
 
   // タグごとの色(タグのキー → 色相 0〜359)。選んでいない(自動。タグ名から決める)タグは持たない。
@@ -1414,6 +1419,7 @@
       url: url,
       title: title,
       tags: normalizeTags(raw.tags, raw.group), // 旧形式(group)の要素は、group 名を1つのタグにする
+      groups: normalizeGroups(raw.groups),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -1508,7 +1514,9 @@
     Object.keys(tagColors).forEach(function (k) {
       if (!used[k]) { delete tagColors[k]; saveTagColors(); }
     });
-    var keptGroups = groupOrder.filter(function (k) { return used[k]; });
+    var usedGroups = Object.create(null);
+    bookmarks.forEach(function (b) { b.groups.forEach(function (g) { usedGroups[tagKey(g)] = true; }); });
+    var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
       saveGroupOrder();
@@ -1517,6 +1525,62 @@
 
   function countUntagged() {
     return bookmarks.filter(function (b) { return b.tags.length === 0; }).length;
+  }
+
+  /* ---------- グループ(ブックマークに複数所属できる。比較・表記の統一・追加は、タグと同じ規則) ---------- */
+
+  // groups が配列なら、文字列だけを整えて返す(空・比較で同じ重複は入れない)。配列でなければ空
+  function normalizeGroups(raw) {
+    var out = [];
+    if (Array.isArray(raw)) raw.forEach(function (g) { if (typeof g === 'string') addTagTo(out, g); });
+    return out;
+  }
+
+  // 比較で同じグループの表記を、配列の先頭に近い要素で最初に現れたものに揃える
+  function unifyGroupNames(list) {
+    var names = Object.create(null);
+    list.forEach(function (b) {
+      b.groups.forEach(function (g) { if (!(tagKey(g) in names)) names[tagKey(g)] = g; });
+    });
+    list.forEach(function (b) {
+      b.groups = b.groups.map(function (g) { return names[tagKey(g)]; });
+    });
+  }
+
+  // 全ブックマークで数えたグループの一覧。並び(groupOrder)にあるものを先に、残りは名前順。検索・絞り込みでは変わらない。
+  function getGroups() {
+    var map = Object.create(null);
+    bookmarks.forEach(function (b) {
+      b.groups.forEach(function (g) {
+        var k = tagKey(g);
+        if (!map[k]) map[k] = { key: k, name: g, count: 0 };
+        map[k].count++;
+      });
+    });
+    return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
+      var ia = groupOrder.indexOf(a.key);
+      var ib = groupOrder.indexOf(b.key);
+      if (ia !== -1 && ib !== -1) return ia - ib;
+      if (ia !== -1) return -1;
+      if (ib !== -1) return 1;
+      return a.key.localeCompare(b.key, 'ja');
+    });
+  }
+
+  function countUngrouped() {
+    return bookmarks.filter(function (b) { return b.groups.length === 0; }).length;
+  }
+
+  // 入力したグループ名を、既存のグループがあればその表記に合わせる(同じグループが別の表記で並ばないように)
+  function canonicalGroup(name) {
+    var k = tagKey(name.trim());
+    var existing = getGroups().filter(function (g) { return g.key === k; })[0];
+    return existing ? existing.name : name.trim();
+  }
+
+  // key のグループに所属するか。key が '' なら、どのグループにも所属しない(「グループなし」)
+  function inGroup(b, key) {
+    return key === '' ? b.groups.length === 0 : b.groups.some(function (g) { return tagKey(g) === key; });
   }
 
   // 入力したタグ名を、既存のタグがあればその表記に合わせる(同じタグが別の表記で並ばないように)
@@ -2688,6 +2752,7 @@
       url: url,
       title: title,
       tags: addTagPicker.tags.slice(),
+      groups: [],
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -3016,7 +3081,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 2, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 3, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -3053,12 +3118,14 @@
         return;
       }
       var importedOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.tagOrder);
-      var importedGroupOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.groupOrder);
+      // groupOrder は、version 3 以降だけ、グループのキーとして読む(旧版の groupOrder は、タグごとの区画の順だった)
+      var importedGroupOrder = !Array.isArray(parsed) && parsed.version >= 3 ? sanitizeTagOrder(parsed.groupOrder) : [];
       var importedColors = sanitizeTagColors(Array.isArray(parsed) ? null : parsed.tagColors);
 
       var sanitized = list.map(sanitizeBookmark).filter(Boolean);
       sanitized.forEach(function (b, i) { b.order = i; });
       unifyTagNames(sanitized);
+      unifyGroupNames(sanitized);
       var skipped = list.length - sanitized.length;
       var message = '現在のブックマーク(' + bookmarks.length + ' 件)を、インポートするデータ(' + sanitized.length + ' 件' +
         (skipped ? '、URL不正のため ' + skipped + ' 件は除外' : '') + ')で置き換えます。よろしいですか?';
@@ -3178,7 +3245,7 @@
   window.addEventListener('storage', function (e) {
     if (e.key === STORAGE_KEY) bookmarks = loadData();
     else if (e.key === TAG_ORDER_KEY) tagOrder = loadTagOrder();
-    else if (e.key === GROUP_ORDER_KEY) { try { groupOrder = sanitizeTagOrder(JSON.parse(e.newValue)); } catch (err) { groupOrder = []; } }
+    else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
     else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
     else return;
     render();
