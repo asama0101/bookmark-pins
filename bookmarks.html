@@ -2561,6 +2561,7 @@
     var parsed = parseTitleAndUrl(e.clipboardData.getData('text'));
     if (!parsed) return;
     e.preventDefault();
+    lastFilled = parsed; // 戻ったときに、同じ内容をもう一度入れないため
     newUrlInput.value = parsed.url;
     newTitleInput.value = parsed.title;
     previewAddFormTags();
@@ -3047,12 +3048,19 @@
   }
 
   // アプリのタブに戻ったとき、クリップボードが「タイトル+改行+URL」なら追加フォームに入れておく(保存は押さない)。
-  // 入力中の内容・モーダル・編集中は壊さない。同じ内容は、メモリだけで覚えて1回しか入れない(保存しない)
-  var lastClipboardFilled = null;
+  // 入力中の内容・モーダル・編集中は壊さない。同じ内容は、メモリだけで覚えて1回しか入れない(保存しない)。
+  // 自動で入れた(貼り付けで入れたものを含む)値のままで手を付けていない欄は、空と同じに扱う(保存せずに閉じても、次の内容が入るように)
+  var lastFilled = null; // 直近に入れた { title, url }
+
+  function sameAsLastFilled(title, url) {
+    return lastFilled !== null && lastFilled.title === title && lastFilled.url === url;
+  }
 
   function canFillAddForm() {
+    var url = newUrlInput.value.trim();
+    var title = newTitleInput.value.trim();
     return helpPanel.hidden && autoTagOverlay.hidden && tagManageOverlay.hidden && state.editingId === null &&
-      newUrlInput.value.trim() === '' && newTitleInput.value.trim() === '';
+      ((url === '' && title === '') || sameAsLastFilled(title, url));
   }
 
   function fillAddFormFromClipboard() {
@@ -3060,8 +3068,8 @@
     navigator.clipboard.readText().then(function (text) {
       if (!canFillAddForm()) return; // 読んでいる間に変わったかもしれない
       var parsed = parseTitleAndUrl(text);
-      if (!parsed || text === lastClipboardFilled) return;
-      lastClipboardFilled = text;
+      if (!parsed || sameAsLastFilled(parsed.title, parsed.url)) return;
+      lastFilled = parsed;
       addPanel.hidden = false;
       newUrlInput.value = parsed.url;
       newTitleInput.value = parsed.title;

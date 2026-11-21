@@ -236,6 +236,31 @@ await setClip(page, 'Editing\nhttps://editing.example/');
 await refocus(page);
 check('編集中は何もしない', !(await addPanelOpen(page)));
 
+// レビューの指摘: 保存せずに閉じても新しい内容が入る/手で直したら置き換えない/貼り付けて保存した直後は入れ直さない
+await open(page, []);
+await setClip(page, 'B\nhttps://b.example/');
+await refocus(page);
+await page.click('#toggle-add-btn'); // 保存せずに閉じる(欄の値は残る)
+await setClip(page, 'C\nhttps://c.example/');
+await refocus(page);
+f = await fields(page);
+check('保存せずに閉じても、新しい内容が入る', (await addPanelOpen(page)) && f.url === 'https://c.example/' && f.title === 'C', f);
+
+await page.evaluate(() => { document.getElementById('new-title').value = 'edited'; });
+await setClip(page, 'D\nhttps://d.example/');
+await refocus(page);
+f = await fields(page);
+check('自動で入れた値を手で直したら、置き換えない', f.url === 'https://c.example/' && f.title === 'edited', f);
+
+await open(page, []);
+await page.click('#toggle-add-btn');
+await paste(page, 'P\nhttps://p.example/');
+await page.click('#add-form button[type=submit]');
+await setClip(page, 'P\nhttps://p.example/');
+await refocus(page);
+f = await fields(page);
+check('貼り付けて保存した直後は、同じ内容を入れ直さない', !(await addPanelOpen(page)) && f.url === '' && f.title === '', f);
+
 const ctx2 = await browser.newContext(); // クリップボードの許可なし
 const denied = await ctx2.newPage();
 const deniedErrors = [];
