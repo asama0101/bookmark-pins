@@ -297,6 +297,53 @@ const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#expo
 const exported = JSON.parse(await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8'));
 check('エクスポートは version 3 で groups を含む', exported.version === 3 && exported.bookmarks[0].groups[0] === 'g1' && Array.isArray(exported.groupOrder), exported);
 
+// ===== グループ(区画・絞り込み・パネル) =====
+const sections = () => page.$$eval('.tag-group', (els) => els.map((e) => e.getAttribute('data-group') + ':' + e.querySelectorAll('.card--list').length));
+
+// 旧データ(groups なし)は、全件が「グループなし」の 1 区画
+await open(page, [bm(0, { tags: ['t'] }), bm(1)]);
+check('旧データは全件が「グループなし」の区画', JSON.stringify(await sections()) === JSON.stringify([':2']), await sections());
+
+// 区画はグループごと。複数のグループに所属すると、それぞれの区画に出る。グループなしは最後
+await open(page, [bm(0, { groups: ['仕事', '資料室'], tags: ['t1'] }), bm(1, { groups: ['仕事'], tags: ['t2'] }), bm(2, { groups: [] })]);
+check('区画はグループごと(複数所属は重複して出る。グループなしは最後)', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
+check('グループなしの区画の見出し', (await page.$$eval('.tag-group-head', (els) => els.map((e) => e.textContent))).pop().startsWith('グループなし'));
+
+// ヘッダーのパネルで、グループを絞り込む。タグの絞り込みとは AND
+await page.click('#group-filter-btn');
+check('パネルが開く', (await page.$eval('#group-popover', (e) => !e.hidden)) && (await page.$eval('#group-filter-btn', (e) => e.getAttribute('aria-expanded'))) === 'true');
+await page.click('[data-group-filter="資料室"]');
+check('グループで絞ると、その区画だけ', JSON.stringify(await sections()) === JSON.stringify(['資料室:1']), await sections());
+check('パネルは選んだら閉じる', await page.$eval('#group-popover', (e) => e.hidden));
+await page.click('.tag-tile[data-tag="t2"]');
+check('グループとタグは AND(該当なしなら区画が無い)', (await sections()).length === 0);
+await page.click('#filter-clear-btn');
+check('解除でグループとタグの両方が外れる', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
+
+// 同名のタグとグループは、別の絞り込みとして動く
+await open(page, [bm(0, { groups: ['x'], tags: ['y'] }), bm(1, { groups: ['y'], tags: ['x'] })]);
+await page.click('#group-filter-btn');
+await page.click('[data-group-filter="x"]');
+check('グループ x は、タグ x の行を巻き込まない', (await titles(page)).join() === 'T0', await titles(page));
+
+// 絞り込み中のグループが無くなったら、絞り込みが外れる(画面が空にならない)
+await open(page, [bm(0, { groups: ['solo'] }), bm(1, { groups: ['other'] })]);
+await page.click('#group-filter-btn');
+await page.click('[data-group-filter="solo"]');
+await page.click('.card--list [data-action="delete"]');
+check('絞り込み中のグループが消えたら、残りが出る', (await titles(page)).length === 1, await titles(page));
+
+// 検索の対象にグループ名を含める。0 件の区画は見出しごと隠す
+await open(page, [bm(0, { groups: ['営業部'] }), bm(1, { groups: ['開発部'] })]);
+await page.fill('#search-input', '営業');
+check('グループ名で検索できる', JSON.stringify(await sections()) === JSON.stringify(['営業部:1']), await sections());
+
+// Escape: パネルが開いているとき、Escape はパネルを閉じる
+await open(page, [bm(0, { groups: ['g'] })]);
+await page.click('#group-filter-btn');
+await page.keyboard.press('Escape');
+check('Escape でパネルが閉じる', await page.$eval('#group-popover', (e) => e.hidden));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
