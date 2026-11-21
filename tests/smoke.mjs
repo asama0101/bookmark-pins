@@ -384,6 +384,70 @@ check('詳細にグループが出る', (await page.$eval('#detail', (e) => e.te
 await page.click('.tag-group[data-group=""] .card--list', { position: { x: 6, y: 6 } });
 check('グループが無いブックマークの詳細には、グループの項目が出ない', !(await page.$eval('#detail', (e) => e.textContent)).includes('グループ'));
 
+// ===== グループ(管理: 改名・統合・削除・並べ替え) =====
+const mdata = [bm(0, { groups: ['a'], tags: ['x'] }), bm(1, { groups: ['b'] }), bm(2, { groups: ['a', 'c'] })];
+await open(page, mdata);
+await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="group"]');
+const rowNames = () => page.$$eval('#tag-manage-list .tag-manage-name', (els) => els.map((e) => e.textContent));
+check('グループのタブに、グループが並ぶ(名前順)', JSON.stringify(await rowNames()) === JSON.stringify(['a', 'b', 'c']), await rowNames());
+await page.click('[data-manage-tab="tag"]');
+check('タグのタブには、並べ替えの操作が無い', (await page.$$eval('#tag-manage-list [data-action="move-tag-up"]', (e) => e.length)) === 0);
+check('タグのタブには、タグが並ぶ', JSON.stringify(await rowNames()) === JSON.stringify(['x']), await rowNames());
+await page.click('[data-manage-tab="group"]');
+
+// 並べ替え(▼)は groupOrder に保存され、別のタブにも届く
+const tabM = await ctx.newPage();
+await open(tabM, undefined);
+await page.click('#tag-manage-list [data-action="move-tag-down"][data-tag="a"]');
+check('▼ で並びが変わり、保存される', JSON.stringify(await rowNames()) === JSON.stringify(['b', 'a', 'c']) && JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['b', 'a', 'c']), await rowNames());
+await tabM.waitForTimeout(300);
+await tabM.click('#group-filter-btn');
+const orderM = await tabM.$$eval('#group-popover .group-row-name', (els) => els.map((e) => e.textContent));
+check('並びが別のタブにも届く', JSON.stringify(orderM) === JSON.stringify(['すべて', 'b', 'a', 'c']), orderM);
+await tabM.close();
+
+// 改名: 既存の名前にすると統合される(確認を経る)。同名のタグには影響しない
+await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="c"]');
+await page.fill('.tag-rename-input', 'A');
+await page.click('.tag-rename-form button[type=submit]');
+await page.click('[data-action="apply-rename"]');
+const afterRename = await storedJson(page, 'bookmarks_data');
+check('改名で統合され、表記は既存に揃う', JSON.stringify(afterRename[2].groups) === JSON.stringify(['a']), afterRename[2].groups);
+check('同名のタグは変わらない', JSON.stringify(afterRename[0].tags) === JSON.stringify(['x']));
+
+// 削除: グループだけ外れ、ブックマークは残る
+await page.click('#tag-manage-list [data-action="delete-tag"][data-tag="b"]');
+await page.click('[data-action="confirm-delete-tag"]');
+const afterDelete = await storedJson(page, 'bookmarks_data');
+check('グループの削除はブックマークを残す', afterDelete.length === 3 && afterDelete[1].groups.length === 0);
+
+// 絞り込み中のグループを改名すると、絞り込みが新しい名前へ引き継がれる
+await open(page, [bm(0, { groups: ['old'] })]);
+await page.click('#group-filter-btn');
+await page.click('[data-group-filter="old"]');
+await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="group"]');
+await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="old"]');
+await page.fill('.tag-rename-input', 'new');
+await page.click('.tag-rename-form button[type=submit]');
+await page.click('[data-action="apply-rename"]');
+await page.keyboard.press('Escape');
+check('絞り込みが新しい名前へ引き継がれる', (await page.$$eval('.tag-group', (e) => e.map((x) => x.getAttribute('data-group')))).join() === 'new');
+
+// 同名のタグとグループ: タグの改名は、グループの絞り込み・並びに影響しない
+await open(page, [bm(0, { groups: ['same'], tags: ['same'] })]);
+await page.click('#group-filter-btn');
+await page.click('[data-group-filter="same"]');
+await page.click('#tag-manage-open-btn');
+await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="same"]');
+await page.fill('.tag-rename-input', 'renamed');
+await page.click('.tag-rename-form button[type=submit]');
+await page.click('[data-action="apply-rename"]');
+await page.keyboard.press('Escape');
+const sameState = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('bookmarks_data'))[0], sections: Array.prototype.map.call(document.querySelectorAll('.tag-group'), (e) => e.getAttribute('data-group')) }));
+check('タグを改名しても、同名のグループと絞り込みは変わらない', sameState.data.groups[0] === 'same' && sameState.data.tags[0] === 'renamed' && sameState.sections.join() === 'same', sameState);
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
