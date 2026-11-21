@@ -1,10 +1,10 @@
-# bookmarks-pocket
+# bookmark-pins
 
 ブックマークをタグで管理する、個人用のブラウザアプリです。HTML ファイル 1 つで動き、インストールやサーバーは要りません。
 
 ```powershell
-git clone https://github.com/asama0101/bookmarks-pocket.git
-start bookmarks-pocket\bookmarks.html
+git clone https://github.com/asama0101/bookmark-pins.git
+start bookmark-pins\bookmarks.html
 ```
 
 > **注意: ログインパスワードは暗号化されず、平文で保存されます。** 同じブラウザ・プロファイルを使える人は、開発者ツールで読めます。Chrome・Edge では、同じ PC で開いた別のローカル HTML ファイルからも、保存したデータを読めます。出どころの分からない HTML ファイルは、同じブラウザで開かないでください。共有端末や信頼できない環境では、パスワードを保存しないでください。本ソフトウェアは無保証で、データの消失や漏えいによる損害について、作者は責任を負いません。
@@ -24,7 +24,7 @@ start bookmarks-pocket\bookmarks.html
 
 前提: Windows とモダンブラウザが要ります。動作確認は Windows 11 の Chromium だけで、ブラウザのバージョンは記録していません（ブックマークレットは、Chrome と Edge で確認しました）。Firefox・Safari と、macOS・Linux では未確認です。Git は、clone するときだけ要ります。
 
-1. `bookmarks.html` を入手します。Git を使うときは、冒頭の `git clone` を実行します。Git を使わないときは、[bookmarks.html](https://raw.githubusercontent.com/asama0101/bookmarks-pocket/main/bookmarks.html) を右クリックして、名前を付けて保存します。
+1. `bookmarks.html` を入手します。Git を使うときは、冒頭の `git clone` を実行します。Git を使わないときは、[bookmarks.html](https://raw.githubusercontent.com/asama0101/bookmark-pins/main/bookmarks.html) を右クリックして、名前を付けて保存します。
 2. `bookmarks.html` をブラウザで開きます（ダブルクリック、またはブラウザへドラッグ）。clone したときは、冒頭の `start` でも開けます。macOS は `open`、Linux は `xdg-open` を使います（未確認）。
 
 ## 使い方
@@ -33,7 +33,7 @@ start bookmarks-pocket\bookmarks.html
 
 タグを付けて保存すると、⑤ にタグ名のタイルが出て、その下に、タグごとの区画が並びます。以降、⑤ のボタンを「タイル」、一覧のタグごとのまとまりを「区画」と呼びます。
 
-![bookmarks-pocket の画面。上に、①検索ボックス、②「+ 追加」、③「タグ管理」と「自動タグ付け」、⑨「エクスポート」「インポート」「ヘルプ」。左に、④「よく開くサイト」と「最近開いたサイト」。中央の上に、⑤タイル。その下に区画があり、各行に、⑥ドラッグ用のグリップと、⑦タイトルがある。「共有フォルダ」の行に、⑩パスをコピーするボタン。区画の最後は「タグなし」。右に、⑧選択した行の詳細パネル](docs/images/usage.png)
+![bookmark-pins の画面。上に、①検索ボックス、②「+ 追加」、③「タグ管理」と「自動タグ付け」、⑨「エクスポート」「インポート」「ヘルプ」。左に、④「よく開くサイト」と「最近開いたサイト」。中央の上に、⑤タイル。その下に区画があり、各行に、⑥ドラッグ用のグリップと、⑦タイトルがある。「共有フォルダ」の行に、⑩パスをコピーするボタン。区画の最後は「タグなし」。右に、⑧選択した行の詳細パネル](docs/images/usage.png)
 
 図 1: 画面の見かた。次の表の番号は、この図の番号です。
 
