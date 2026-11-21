@@ -1040,6 +1040,12 @@
       <div class="chip-list" id="new-tag-suggest"></div>
     </div>
     <div class="field">
+      <label for="new-group-text">グループ(Enter かカンマで確定)</label>
+      <div class="chip-list" id="new-group-chips"></div>
+      <input id="new-group-text" type="text" placeholder="グループを入力" autocomplete="off">
+      <div class="chip-list" id="new-group-suggest"></div>
+    </div>
+    <div class="field">
       <button class="btn btn-amber" type="submit">保存</button>
     </div>
     <p class="hint">URLは http:// / https:// / file:/// / UNC パス(\\server\share)のいずれかで始まる必要があります。</p>
@@ -1710,6 +1716,7 @@
     renderList();
     renderDetail();
     addTagPicker.refresh();
+    addGroupPicker.refresh();
     if (!tagManageOverlay.hidden) renderTagManageModal(); // モーダルが開いている間は常に最新の件数を反映する
 
     syncHeaderHeight();
@@ -1729,7 +1736,12 @@
 
   // chipsEl に選択中のタグ、suggestEl に既存のタグの候補を出す。タグは Enter・半角カンマ・全角カンマ・読点で確定する。
   // onManual は、ユーザーが手でタグを追加・外したときに呼ばれる(追加フォームの自動タグ付けを止めるため)。
-  function createTagPicker(chipsEl, suggestEl, textEl, onManual) {
+  // 入力する「名前の種類」。タグとグループは、候補(既存の一覧)と、表記の合わせ方だけが違う。省略時はタグ
+  var TAG_SOURCE = { names: getTags, canonical: canonicalTag };
+  var GROUP_SOURCE = { names: getGroups, canonical: canonicalGroup };
+
+  function createTagPicker(chipsEl, suggestEl, textEl, onManual, source) {
+    var src = source || TAG_SOURCE;
     var picker = { tags: [], showAll: false };
     var draggedChipKey = null; // ドラッグ中のチップのタグのキー
 
@@ -1763,7 +1775,7 @@
         });
       });
       var typed = textEl.value.trim().toLowerCase();
-      var list = getTags().filter(function (t) {
+      var list = src.names().filter(function (t) {
         return !hasTag(picker.tags, t.name) && (!typed || t.key.indexOf(typed) !== -1);
       });
       // 入力が空のときは、先頭の SUGGEST_MAX 件だけ出して、残りは「他 N 件を表示」で出す
@@ -1780,7 +1792,7 @@
     // 追加できたら true(空・重複は追加しない)
     function add(name) {
       var before = picker.tags.length;
-      addTagTo(picker.tags, canonicalTag(name));
+      addTagTo(picker.tags, src.canonical(name));
       return picker.tags.length !== before;
     }
 
@@ -2690,6 +2702,7 @@
       '<dl>' +
         '<div><dt>URL</dt><dd class="mono">' + escapeHtml(b.url) + '</dd></div>' +
         (b.memo ? '<div><dt>メモ</dt><dd>' + highlightText(b.memo, tokens) + '</dd></div>' : '') +
+        (b.groups.length ? '<div><dt>グループ</dt><dd>' + b.groups.map(escapeHtml).join(' / ') + '</dd></div>' : '') +
         (b.tags.length ? '<div><dt>タグ</dt><dd>' + b.tags.map(function (t) { return highlightText(t, tokens); }).join(' / ') + '</dd></div>' : '') +
         (b.loginId ? '<div><dt>ログインID</dt><dd class="mono">' + escapeHtml(b.loginId) + copyBtn('copy-login-id') + '</dd></div>' : '') +
         (b.loginPassword ? '<div><dt>パスワード</dt><dd class="mono">●●●●●●●●' + copyBtn('copy-login-password') + '</dd></div>' : '') +
@@ -2717,6 +2730,7 @@
             '<div class="field"><label for="edit-url">URL</label><input id="edit-url" type="text" name="url" value="' + escapeHtml(d.url) + '" required></div>' +
             '<div class="field"><label for="edit-title">タイトル</label><input id="edit-title" type="text" name="title" value="' + escapeHtml(d.title) + '" required></div>' +
             '<div class="field"><label for="edit-tag-text">タグ(Enter かカンマで確定)</label><div class="chip-list" id="edit-tag-chips"></div><input id="edit-tag-text" type="text" placeholder="タグを入力" autocomplete="off"><div class="chip-list" id="edit-tag-suggest"></div></div>' +
+            '<div class="field"><label for="edit-group-text">グループ(Enter かカンマで確定)</label><div class="chip-list" id="edit-group-chips"></div><input id="edit-group-text" type="text" placeholder="グループを入力" autocomplete="off"><div class="chip-list" id="edit-group-suggest"></div></div>' +
             '<div class="field"><label for="edit-login-id">ログインID</label><input id="edit-login-id" type="text" name="loginId" value="' + escapeHtml(d.loginId) + '"></div>' +
             '<div class="field">' +
               '<label for="edit-login-password">パスワード</label>' +
@@ -2744,7 +2758,7 @@
     function saveDraft() {
       state.editDraft = {
         id: b.id, url: form.url.value, title: form.title.value, loginId: form.loginId.value,
-        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice()
+        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice(), groups: groupPicker.tags.slice()
       };
     }
     var picker = createTagPicker(
@@ -2753,7 +2767,16 @@
       document.getElementById('edit-tag-text'),
       saveDraft
     );
-    picker.set(state.editDraft && state.editDraft.id === b.id ? state.editDraft.tags : b.tags);
+    var groupPicker = createTagPicker(
+      document.getElementById('edit-group-chips'),
+      document.getElementById('edit-group-suggest'),
+      document.getElementById('edit-group-text'),
+      saveDraft,
+      GROUP_SOURCE
+    );
+    var hasDraft = state.editDraft && state.editDraft.id === b.id;
+    picker.set(hasDraft ? state.editDraft.tags : b.tags);
+    groupPicker.set(hasDraft ? state.editDraft.groups : b.groups);
     form.addEventListener('input', saveDraft);
 
     cancelBtn.addEventListener('click', function () {
@@ -2770,11 +2793,13 @@
         return;
       }
       picker.commit(); // 入力欄に残っている未確定のタグも含める
+      groupPicker.commit(); // グループも同じ
       b.url = url;
       b.scheme = scheme;
       b.domain = deriveDomain(url, scheme);
       b.title = form.title.value.trim() || deriveTentativeTitle(url, scheme);
       b.tags = picker.tags.slice();
+      b.groups = groupPicker.tags.slice();
       b.loginId = form.loginId.value.trim() || null;
       b.loginPassword = form.loginPassword.value || null;
       b.memo = form.memo.value.trim() ? form.memo.value : null;
@@ -2816,6 +2841,14 @@
     document.getElementById('new-tag-suggest'),
     document.getElementById('new-tag-text'),
     function () { addFormTagsManual = true; }
+  );
+  // グループは、自動では選ばない(タグの事前選択の対象外)
+  var addGroupPicker = createTagPicker(
+    document.getElementById('new-group-chips'),
+    document.getElementById('new-group-suggest'),
+    document.getElementById('new-group-text'),
+    function () {},
+    GROUP_SOURCE
   );
 
   // URL・タイトル・メモの入力に合わせて、含まれる既存のタグ名をすべて事前選択して見せる
@@ -2859,6 +2892,7 @@
     }
 
     addTagPicker.commit(); // 入力欄に残っている未確定のタグも含める
+    addGroupPicker.commit(); // グループも同じ
     var title = newTitleInput.value.trim() || deriveTentativeTitle(url, scheme);
     var domain = deriveDomain(url, scheme);
     var loginId = document.getElementById('new-login-id').value.trim() || null;
@@ -2870,7 +2904,7 @@
       url: url,
       title: title,
       tags: addTagPicker.tags.slice(),
-      groups: [],
+      groups: addGroupPicker.tags.slice(),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -2883,6 +2917,8 @@
     addForm.reset();
     addTagPicker.set([]);
     addTagPicker.showAll = false;
+    addGroupPicker.set([]);
+    addGroupPicker.showAll = false;
     addFormTagsManual = false;
     addPanel.hidden = true;
     render();

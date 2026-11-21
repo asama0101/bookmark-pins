@@ -344,6 +344,46 @@ await page.click('#group-filter-btn');
 await page.keyboard.press('Escape');
 check('Escape でパネルが閉じる', await page.$eval('#group-popover', (e) => e.hidden));
 
+// ===== グループ(追加・編集フォーム、詳細パネル) =====
+// 追加フォーム: グループを入れて保存できる(Enter で確定。タグの自動選択はグループには働かない)
+await open(page, [bm(0, { groups: ['既存'], tags: ['ai'] })]);
+await page.click('#toggle-add-btn');
+await page.fill('#new-url', 'https://ai.example.com');
+check('追加フォームのグループは自動選択されない', (await page.$eval('#new-group-chips', (e) => e.textContent.trim())) === '');
+await page.fill('#new-title', 'G1');
+await page.fill('#new-group-text', '新規グループ');
+await page.press('#new-group-text', 'Enter');
+await page.click('#add-form button[type=submit]');
+const savedG = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data')).find((b) => b.title === 'G1').groups);
+check('追加フォームで付けたグループが保存される', JSON.stringify(savedG) === JSON.stringify(['新規グループ']), savedG);
+
+// 既存のグループは、入力すると表記が揃う(大文字小文字違いでも)
+await open(page, [bm(0, { groups: ['Work'] })]);
+await page.click('#toggle-add-btn');
+await page.fill('#new-url', 'https://x.example.com');
+await page.fill('#new-title', 'G2');
+await page.fill('#new-group-text', 'work');
+await page.press('#new-group-text', 'Enter');
+check('既存のグループの表記に揃う', (await page.$eval('#new-group-chips', (e) => e.textContent.trim())).startsWith('Work'));
+
+// 編集フォーム: グループの入力中の内容が、再描画(タグの絞り込み)で消えない。保存で反映される
+await open(page, [bm(0, { groups: ['g1'], tags: ['t1'] })]);
+await page.click('.card--list [data-action="edit"]');
+await page.fill('#edit-group-text', 'g2');
+await page.press('#edit-group-text', 'Enter');
+await page.click('.tag-tile[data-tag="t1"]');
+check('編集中のグループが再描画で消えない', (await page.$eval('#edit-group-chips', (e) => e.textContent)).includes('g2'));
+await page.click('[data-edit-form] button[type=submit]');
+const editedG = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data'))[0].groups);
+check('編集で付けたグループが保存される', JSON.stringify(editedG) === JSON.stringify(['g1', 'g2']), editedG);
+
+// 詳細パネルに「グループ」の項目が出る(グループが無いときは出さない)
+await open(page, [bm(0, { groups: ['仕事', '資料室'] }), bm(1)]);
+await page.click('.tag-group[data-group="仕事"] .card--list', { position: { x: 6, y: 6 } });
+check('詳細にグループが出る', (await page.$eval('#detail', (e) => e.textContent)).includes('仕事 / 資料室'));
+await page.click('.tag-group[data-group=""] .card--list', { position: { x: 6, y: 6 } });
+check('グループが無いブックマークの詳細には、グループの項目が出ない', !(await page.$eval('#detail', (e) => e.textContent)).includes('グループ'));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
