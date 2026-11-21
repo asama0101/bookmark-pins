@@ -241,6 +241,13 @@ await page.fill('#edit-memo', 'draft');
 await page.click('.tag-tile[data-tag="t1"]');
 check('編集フォームが全幅の 1 枚で出て、入力が残る', (await page.$$('#edit-memo')).length === 1 && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft');
 
+// 詳細パネル: 項目が出て、パスワードは伏せ字(値は出さない)。回数が出る
+await open(page, [bm(0, { loginId: 'user01', loginPassword: 'secret-pw', memo: 'M' })]);
+await page.click('.card--list', { position: { x: 6, y: 6 } });
+const det = await page.$eval('#detail', (e) => e.textContent);
+check('詳細にパスワードの値は出ない', !det.includes('secret-pw') && det.includes('●●●●●●●●'), det);
+check('詳細に回数と注記が出る', det.includes('直近28日に開いた回数') && det.includes('パスワードは平文で保存されます'), det);
+
 // 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行は隠れる
 await open(page, []);
 check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));

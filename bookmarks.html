@@ -229,14 +229,14 @@
   .add-panel {
     background: var(--card);
     border-bottom: 1px solid var(--sage);
-    padding: 18px 24px;
+    padding: 22px 32px;
   }
   .add-panel[hidden] { display: none; }
 
   .help-panel {
     background: var(--card);
     border-bottom: 1px solid var(--sage);
-    padding: 18px 24px;
+    padding: 22px 32px;
     position: sticky;
     top: var(--header-h);
     z-index: 5;
@@ -283,22 +283,24 @@
 
   .field label {
     display: block;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     color: var(--ink-soft);
     margin-bottom: 4px;
   }
 
   .field input {
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 14px;
     border: 1px solid var(--sage);
-    border-radius: 4px;
-    font-size: 0.9rem;
+    border-radius: 14px;
+    font-size: 0.95rem;
     background: #fff;
     color: var(--ink);
   }
+  .field input:focus, .field textarea:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
 
   .add-panel .hint {
     grid-column: 1 / -1;
@@ -319,13 +321,13 @@
 
   .field textarea {
     width: 100%;
-    padding: 8px 10px;
+    padding: 10px 14px;
     border: 1px solid var(--sage);
-    border-radius: 4px;
-    font-size: 0.9rem;
+    border-radius: 14px;
+    font-size: 0.95rem;
     font-family: inherit;
     resize: vertical;
-    min-height: 38px;
+    min-height: 44px;
     background: #fff;
     color: var(--ink);
   }
@@ -476,7 +478,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(27, 53, 56, 0.55);
+    background: rgba(31, 42, 55, 0.45);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -487,13 +489,13 @@
 
   .modal {
     background: var(--card);
-    border-radius: 10px;
-    padding: 20px 24px;
+    border-radius: 24px;
+    padding: 24px 28px;
     width: 100%;
     max-width: 420px;
     max-height: 80vh;
     overflow-y: auto;
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 30px 60px -20px rgba(40, 60, 90, 0.5);
   }
 
   .modal-header {
@@ -510,13 +512,14 @@
   .modal-close-btn {
     background: transparent;
     border: none;
-    font-size: 1.2rem;
+    font-size: 1.3rem;
     line-height: 1;
     color: var(--ink-soft);
-    padding: 2px 6px;
-    border-radius: 4px;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
   }
-  .modal-close-btn:hover { color: var(--ink); background: rgba(27, 53, 56, 0.08); }
+  .modal-close-btn:hover { color: var(--amber); background: var(--hover); }
 
   .tag-manage-hint {
     font-size: 0.78rem;
@@ -537,12 +540,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 8px;
-    border: 1px solid var(--sage);
-    border-radius: 6px;
-    background: rgba(27, 53, 56, 0.03);
+    padding: 8px 12px;
+    border: none;
+    border-radius: 14px;
+    background: var(--ivory);
   }
-  .tag-manage-row .btn-quiet, .tag-manage-row .btn-danger { padding: 3px 10px; font-size: 0.75rem; }
+  .tag-manage-row .btn-quiet, .tag-manage-row .btn-danger { padding: 3px 12px; font-size: 0.8rem; }
   .tag-manage-row { flex-wrap: wrap; }
   .tag-color-btn, .tag-color-swatch {
     width: 20px; height: 20px; flex: none; padding: 0; border-radius: 50%; cursor: pointer;
@@ -568,13 +571,11 @@
     font-weight: 700;
     font-size: 0.95rem;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere; /* 長いタグ名も、省略せず全文で出す */
   }
   .tag-manage-count {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
     color: var(--ink-soft);
   }
 
@@ -594,9 +595,9 @@
     font-family: var(--font-display);
     font-weight: 700;
     font-size: 0.95rem;
-    padding: 2px 6px;
+    padding: 4px 12px;
     border: 1px solid var(--sage);
-    border-radius: 4px;
+    border-radius: 12px;
     min-width: 0;
     flex: 1 1 auto;
   }
@@ -617,11 +618,11 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
-    padding: 6px 8px;
-    border: 1px solid var(--sage);
-    border-radius: 6px;
-    background: rgba(27, 53, 56, 0.03);
-    font-size: 0.85rem;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 14px;
+    background: var(--ivory);
+    font-size: 0.9rem;
     cursor: pointer;
   }
   .auto-tag-row input { margin-top: 3px; flex: none; }
@@ -637,12 +638,11 @@
 
   .search-no-results {
     grid-column: 1 / -1;
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
     color: var(--ink-soft);
     padding: 40px 18px;
     text-align: center;
-    border-top: 1px solid var(--sage);
   }
 
   /* ---------- カード ---------- */
@@ -896,27 +896,31 @@
 
   .detail {
     background: var(--card);
-    border: 1px solid var(--sage);
-    border-radius: 10px;
-    padding: 14px;
+    border: none;
+    border-radius: 26px;
+    padding: 26px 24px 24px;
+    box-shadow: 0 1px 2px rgba(40, 60, 90, 0.05), 0 24px 44px -24px rgba(40, 60, 90, 0.38);
   }
-  .detail-open { display: block; margin-top: 14px; padding: 9px 12px; text-align: center; text-decoration: none; }
-  .detail-empty { margin: 0; font-size: 0.84rem; color: var(--ink-soft); }
-  .detail-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .detail-open { display: block; margin-top: 18px; padding: 13px 12px; text-align: center; text-decoration: none; }
+  .detail-empty { margin: 0; font-size: 0.9rem; color: var(--ink-soft); }
+  .detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
   .detail-edit { margin-left: auto; align-self: flex-start; flex: none; }
-  .detail-title { margin: 0; font-family: var(--font-display); font-size: 0.95rem; line-height: 1.4; overflow-wrap: anywhere; }
+  .detail-title { margin: 0; font-family: var(--font-display); font-size: 1.25rem; line-height: 1.4; overflow-wrap: anywhere; }
   .detail dl { margin: 0; display: grid; gap: 10px; }
-  .detail dt { font-family: var(--font-mono); font-size: 0.7rem; color: var(--ink-soft); margin-bottom: 2px; }
-  .detail dd { margin: 0; font-size: 0.84rem; line-height: 1.55; overflow-wrap: anywhere; }
-  .detail dd.mono { font-family: var(--font-mono); font-size: 0.76rem; }
-  .detail-copy { font-family: inherit; font-size: 0.74rem; margin-left: 6px; padding: 0 7px; border: 1px solid var(--sage); border-radius: 4px; background: transparent; color: var(--ink); }
-  .detail-copy:hover { background: var(--hover); }
-  .detail-warn { margin: 0; font-size: 0.7rem; color: var(--ink-soft); }
+  /* 項目ごとの淡い箱: ラベルを上、値を下に出す */
+  .detail dl > div { background: var(--ivory); border-radius: 14px; padding: 10px 14px; }
+  .detail dt { font-size: 0.78rem; font-weight: 600; color: var(--ink-soft); margin-bottom: 2px; }
+  .detail dd { margin: 0; font-size: 0.95rem; line-height: 1.55; overflow-wrap: anywhere; }
+  .detail dd.mono { font-family: var(--font-mono); font-size: 0.85rem; }
+  .detail dd:has(.detail-copy) { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .detail-copy { font-family: inherit; font-size: 0.85rem; font-weight: 600; flex: none; padding: 4px 14px; border: none; border-radius: 999px; background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.15); }
+  .detail-copy:hover { color: var(--amber); }
+  .detail-warn { margin: 12px 4px 0; font-size: 0.8rem; color: var(--ink-soft); }
 
   /* ---------- 編集フォーム(カード内) ---------- */
 
-  .edit-form { display: grid; gap: 8px; width: 100%; }
-  .edit-form .field input { padding: 6px 8px; }
+  .edit-form { display: grid; gap: 10px; width: 100%; }
+  .edit-form .field input { padding: 8px 14px; }
   .edit-form-actions { display: flex; gap: 8px; margin-top: 4px; }
 
   /* 版数は、フッターの文字を、画面の右下に薄く固定して常に見えるようにする(クリックの邪魔をしない) */
@@ -2498,7 +2502,7 @@
     el.innerHTML =
       '<div class="detail-head"><div class="seal">' + resolveIconHtml(b) + '</div>' +
         '<h2 class="detail-title">' + highlightText(b.title, tokens) + '</h2>' +
-        '<button type="button" class="icon-btn detail-edit" data-action="detail-edit" aria-label="編集">&#9998;</button></div>' +
+        '<button type="button" class="icon-btn detail-edit" data-action="detail-edit" aria-label="編集" title="編集">' + ICONS.edit + '</button></div>' +
       '<dl>' +
         '<div><dt>URL</dt><dd class="mono">' + escapeHtml(b.url) + '</dd></div>' +
         (b.memo ? '<div><dt>メモ</dt><dd>' + highlightText(b.memo, tokens) + '</dd></div>' : '') +
