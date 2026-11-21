@@ -344,11 +344,13 @@
   /* 左(よく開くサイト) / 中央(タグ行と一覧) / 右(詳細)の3列 */
   .layout {
     display: grid;
-    grid-template-columns: 220px minmax(0, 760px) 300px;
+    grid-template-columns: 220px minmax(0, 1fr) 320px;
     justify-content: center;
-    gap: 20px;
+    gap: 32px;
+    max-width: 1480px;
+    margin: 0 auto;
     align-items: start;
-    padding: 24px;
+    padding: 12px 32px 80px;
     min-height: calc(100vh - 64px);
   }
 
@@ -368,26 +370,25 @@
   /* 左列の区画(よく開くサイト・最近開いたサイト)は、枠で囲み、区画の境目を分かりやすくする */
   .side-col section {
     background: var(--card);
-    border: 1px solid var(--sage);
-    border-radius: 10px;
+    border: none;
+    border-radius: 22px;
+    box-shadow: 0 1px 2px rgba(40, 60, 90, 0.05), 0 16px 32px -20px rgba(40, 60, 90, 0.28);
     overflow: hidden;
   }
   .side-col section[hidden] { display: none; }
   .side-label {
     font-family: var(--font-display);
-    font-size: 0.82rem;
-    margin: 0 0 4px;
-    padding: 8px 12px;
+    font-size: 0.9rem;
+    margin: 0;
+    padding: 16px 18px 6px;
     font-weight: 700;
+    color: var(--ink-soft);
   }
-  /* 2つの区画を見分けられるよう、見出しの色を変える(よく開く: 琥珀、最近: 青緑) */
-  #top-sites-section .side-label { background: hsl(40 42% 90%); color: hsl(35 35% 22%); border-bottom: 1px solid hsl(40 28% 82%); }
-  #recent-sites-section .side-label { background: hsl(185 16% 90%); color: hsl(190 30% 20%); border-bottom: 1px solid hsl(185 14% 82%); }
-  .side-col .top-sites { padding: 0 6px 6px; }
+  .side-col .top-sites { padding: 0 8px 10px; }
 
   .result-count {
-    font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-family: var(--font-body);
+    font-size: 0.85rem;
     color: var(--ink-soft);
     margin: 0 0 16px;
   }
@@ -400,8 +401,9 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none; /* スクロールバーは出さない(ホイール・ドラッグ・タッチで動かせる) */
-    gap: 6px;
+    gap: 8px;
     align-items: center;
+    padding: 4px 2px 12px; /* タイルの影が切れないように */
   }
 
   /* ---------- よく開くサイト(直近の利用が多い順の縦リスト) ---------- */
@@ -415,55 +417,57 @@
   .top-site {
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 5px 6px;
-    border-radius: 5px;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
     color: var(--ink);
-    font-size: 0.8rem;
+    font-size: 0.95rem;
     text-decoration: none;
     white-space: nowrap;
   }
   .top-site:hover { background: var(--hover); }
-  .top-site-rank, .top-site-count { font-family: var(--font-mono); font-size: 0.72rem; flex-shrink: 0; }
-  .top-site-rank { color: var(--ink-soft); width: 1.2em; text-align: right; }
-  .top-site-count { color: var(--amber); }
+  .top-site-rank, .top-site-count { font-family: var(--font-body); font-size: 0.8rem; flex-shrink: 0; }
+  .top-site-rank { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--ivory); color: var(--ink-soft); font-weight: 600; }
+  .top-site-count { color: var(--ink-soft); }
   .top-site-icon { display: flex; flex-shrink: 0; }
-  .top-site-icon img, .top-site-icon svg { width: 14px; height: 14px; }
+  .top-site-icon img, .top-site-icon svg { width: 18px; height: 18px; }
   .top-site-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
   .tag-tile {
     display: inline-flex;
     flex: none;
     white-space: nowrap;
-    align-items: baseline;
-    gap: 4px;
+    align-items: center;
+    gap: 8px;
     text-align: left;
     background: var(--card);
-    border: 1px solid var(--sage);
+    border: none;
     border-radius: 999px;
-    padding: 2px 10px;
+    height: 36px;
+    padding: 0 16px 0 13px;
     color: var(--ink);
     cursor: pointer;
+    box-shadow: 0 1px 2px rgba(40, 60, 90, 0.08);
   }
-  .tag-tile:hover { background: var(--hover); border-color: var(--amber); }
-  /* タグごとの色(--h は、タグのキーから決めた色相。タグが違えば色が違い、同じタグはいつも同じ色) */
-  .tag-tile::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: hsl(var(--h, 220) 28% 52%); align-self: center; flex: none; }
-  .tag-tile[aria-pressed="true"] { background: hsl(var(--h, 220) 26% 32%); border-color: hsl(var(--h, 220) 26% 32%); color: #fff; }
+  .tag-tile:hover { box-shadow: 0 6px 14px -6px rgba(40, 60, 90, 0.35); }
+  /* タグごとの色(--h は、タグのキーから決めた色相。タグが違えば色が違い、同じタグはいつも同じ色。彩度は落とす) */
+  .tag-tile::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: hsl(var(--h, 220) 38% 52%); flex: none; }
+  .tag-tile[aria-pressed="true"] { background: var(--amber); color: #fff; }
   .tag-tile[aria-pressed="true"]::before { background: #fff; }
-  .tag-tile[aria-pressed="true"] .tag-tile-name { font-weight: 700; }
   .tag-tile[aria-pressed="true"] .tag-tile-count { color: rgba(255, 255, 255, 0.8); }
-  .tag-tile:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+  .tag-tile:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
   .tag-tile.dragging { opacity: 0.45; }
   .tag-tile.drop-before { box-shadow: -3px 0 0 var(--amber); }
   .tag-tile.drop-after { box-shadow: 3px 0 0 var(--amber); }
+  /* タグ名は省略しない(長い名前も全文で出す。タグ行は横スクロール) */
   .tag-tile-name {
     font-family: var(--font-display);
-    font-size: 0.8rem;
-    overflow-wrap: anywhere;
+    font-size: 0.95rem;
+    font-weight: 600;
   }
   .tag-tile-count {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
     color: var(--ink-soft);
   }
 
@@ -838,7 +842,8 @@
     position: sticky;
     top: var(--header-h);
     z-index: 4;
-    background: var(--ivory);
+    background: color-mix(in srgb, var(--ivory) 92%, transparent);
+    backdrop-filter: blur(8px);
     margin: 0 0 8px;
   }
   .list-toolbar {

@@ -205,6 +205,11 @@ const clip2 = await src2.evaluate(() => navigator.clipboard.readText()).catch((e
 check('登録用リンクの href としてコードを実行しても、タイトルと URL がコピーされる', JSON.stringify(clip2.split(/\r?\n/)) === JSON.stringify(['Foo Bar', 'https://page.test/']), clip2);
 await src2.close();
 
+// 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行は隠れる
+await open(page, []);
+check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));
+check('タグが 0 個のとき、タグ行の区画は隠れる', await page.$eval('#tag-section', (e) => e.hidden));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
