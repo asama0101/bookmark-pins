@@ -205,6 +205,42 @@ const clip2 = await src2.evaluate(() => navigator.clipboard.readText()).catch((e
 check('登録用リンクの href としてコードを実行しても、タイトルと URL がコピーされる', JSON.stringify(clip2.split(/\r?\n/)) === JSON.stringify(['Foo Bar', 'https://page.test/']), clip2);
 await src2.close();
 
+// 行のボタンは、文字ではなくアイコン(名前は aria-label)
+await open(page, [bm(0, { loginId: 'u', loginPassword: 'p' })]);
+const idBtn = await page.$eval('.card--list [data-action="copy-login-id"]', (e) => ({ label: e.getAttribute('aria-label'), text: e.textContent.trim(), svg: !!e.querySelector('svg') }));
+check('ID のボタンはアイコンで、名前が付く', idBtn.label === 'ログインIDをコピー' && idBtn.text === '' && idBtn.svg, idBtn);
+
+// メモが無い行は、ホスト名を 2 行目に出す。メモがあればメモ
+await open(page, [bm(0, { memo: null }), bm(1, { memo: 'M1' })]);
+const subs = await page.$$eval('.card--list .row-memo-preview', (els) => els.map((e) => e.textContent));
+check('メモが無い行はホスト名、あればメモ', JSON.stringify(subs) === JSON.stringify(['e0.example.com', 'M1']), subs);
+
+// UNC の行(ドメインなし)は、2 行目が無くても崩れず、行が描画される
+await open(page, [bm(0, { url: '\\\\srv\\share\\a', scheme: 'unc', domain: null, memo: null })]);
+check('UNC の行が描画される', (await titles(page)).length === 1);
+
+// 長いタグ名: 省略されず、チップが 3 行を超えるぶんだけ +N になる
+const longTag = 'プロジェクト管理システム運用手順書(2026年度版)';
+await open(page, [bm(0, { tags: [longTag, 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'a12'] })]);
+const chipInfo = await page.evaluate(() => {
+  const card = document.querySelector('.card--list'); // 行は、付いているタグの区画ごとに出るので、最初の 1 枚だけを見る
+  const hidden = card.querySelectorAll('.row-tags .row-tag[hidden]').length;
+  const more = card.querySelector('.row-tags .row-tag-more');
+  const first = card.querySelector('.row-tags .row-tag');
+  return { hidden, more: more ? more.textContent : null, first: first.textContent, overflow: getComputedStyle(first).textOverflow };
+});
+check('長いタグ名は省略されない', chipInfo.first === longTag && chipInfo.overflow !== 'ellipsis', chipInfo);
+check('チップは 3 行まで。残りは +N', chipInfo.hidden > 0 && chipInfo.more === '+' + chipInfo.hidden, chipInfo);
+const tileInfo = await page.$eval('.tag-tile[data-tag] .tag-tile-name', (e) => ({ text: e.textContent, overflow: getComputedStyle(e).textOverflow }));
+check('タグのタイルは名前を省略しない', tileInfo.overflow !== 'ellipsis' && tileInfo.text.length > 0, tileInfo);
+
+// 編集フォームが区画の中で出て、入力中の内容が、グリッドの再描画で消えない
+await open(page, [bm(0, { tags: ['t1'] }), bm(1, { tags: ['t1'] })]);
+await page.click('.card--list [data-action="edit"]');
+await page.fill('#edit-memo', 'draft');
+await page.click('.tag-tile[data-tag="t1"]');
+check('編集フォームが全幅の 1 枚で出て、入力が残る', (await page.$$('#edit-memo')).length === 1 && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft');
+
 // 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行は隠れる
 await open(page, []);
 check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));
