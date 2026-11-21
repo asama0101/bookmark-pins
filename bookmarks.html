@@ -1557,24 +1557,28 @@
     });
   }
 
-  // 使われなくなったタグ(削除・編集などで消えたもの)をタイルの並びと区画の順から外す。変わったときだけ保存する
+  // 別のタブが保存した変更を取り込んだ再描画の間は true。そのあいだ pruneTagOrder() は、メモリ上でだけ整え、保存しない。
+  // 保存すると、取り込み途中の古い並び・色が、別のタブが先に書いた新しい並びを上書きして消す(データ→並びの順に届くため)
+  var syncingFromStorage = false;
+
+  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)をタイルの並び・色・グループの並びから外す。変わったときだけ保存する
   function pruneTagOrder() {
     var used = Object.create(null);
     bookmarks.forEach(function (b) { b.tags.forEach(function (t) { used[tagKey(t)] = true; }); });
     var kept = tagOrder.filter(function (k) { return used[k]; });
     if (kept.length !== tagOrder.length) {
       tagOrder = kept;
-      saveTagOrder();
+      if (!syncingFromStorage) saveTagOrder();
     }
     Object.keys(tagColors).forEach(function (k) {
-      if (!used[k]) { delete tagColors[k]; saveTagColors(); }
+      if (!used[k]) { delete tagColors[k]; if (!syncingFromStorage) saveTagColors(); }
     });
     var usedGroups = Object.create(null);
     bookmarks.forEach(function (b) { b.groups.forEach(function (g) { usedGroups[tagKey(g)] = true; }); });
     var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
-      saveGroupOrder();
+      if (!syncingFromStorage) saveGroupOrder();
     }
   }
 
@@ -1991,7 +1995,7 @@
     if (again) again.focus();
   });
 
-  // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(タグの絞り込み中は有効)
+  // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(グループ・タグの絞り込み中は有効)
   function canReorder() {
     return getSearchTokens().length === 0;
   }
@@ -2613,7 +2617,7 @@
     moveGroup(key, keys[j], delta > 0);
   }
 
-  // group は、タグごとの表示での区画のキー(タグなしは '')。その区画の中だけで並べ替えられる。
+  // group は、区画(グループ)のキー(グループなしは '')。その区画の中だけで並べ替えられる。
   function bindDragEvents(card, b, group) {
     card.setAttribute('draggable', 'true');
     bindDragReorder(card, b.id, {
@@ -2626,7 +2630,7 @@
   }
 
   // targetId の直前(after=false)または直後(after=true)に draggedId のブックマークを移動する。
-  // タグの絞り込み中は表示が一部なので、全体の並びでは移動先の隣に入れる。表示中の相対順は、ドロップした位置のとおりになる。
+  // グループ・タグの絞り込み中は表示が一部なので、全体の並びでは移動先の隣に入れる。表示中の相対順は、ドロップした位置のとおりになる。
   function moveBookmark(draggedId, targetId, after) {
     if (!draggedId || draggedId === targetId) return;
     var dragged = bookmarks.find(function (x) { return x.id === draggedId; });
@@ -3469,7 +3473,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return; // ブラウザ標準のショートカットを妨げない
 
     if (e.key === 'Escape') {
-      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden) {
+      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
         clearSearch();
         return;
       }
@@ -3502,7 +3506,8 @@
     else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
     else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
     else return;
-    render();
+    syncingFromStorage = true;
+    try { render(); } finally { syncingFromStorage = false; }
   });
 
   render();

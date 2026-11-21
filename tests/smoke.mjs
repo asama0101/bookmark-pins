@@ -448,6 +448,29 @@ await page.keyboard.press('Escape');
 const sameState = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('bookmarks_data'))[0], sections: Array.prototype.map.call(document.querySelectorAll('.tag-group'), (e) => e.getAttribute('data-group')) }));
 check('タグを改名しても、同名のグループと絞り込みは変わらない', sameState.data.groups[0] === 'same' && sameState.data.tags[0] === 'renamed' && sameState.sections.join() === 'same', sameState);
 
+// ===== 最終レビューの指摘 =====
+// 2 つのタブ: 片方でインポートした groupOrder が、もう片方の再描画(storage イベント)で消えない
+await open(page, [bm(0, { groups: ['c', 'a'] })]);
+await page.evaluate(() => localStorage.setItem('bookmarks_groups_order', JSON.stringify(['c', 'a']))); // 別のタブが、古い並びを持っている状態にする
+await page.reload();
+const tabB = await ctx.newPage();
+await open(tabB, undefined);
+await importJson(page, { version: 3, bookmarks: [bm(0, { groups: ['z'] }), bm(1, { groups: ['b'] })], groupOrder: ['z', 'b'] });
+await tabB.waitForTimeout(500);
+check('インポートした groupOrder が、別のタブの再描画で消えない', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['z', 'b']), await storedJson(page, 'bookmarks_groups_order'));
+await tabB.click('#group-filter-btn');
+const orderB = await tabB.$$eval('#group-popover .group-row-name', (els) => els.map((e) => e.textContent));
+check('別のタブにも、インポートした並びが出る', JSON.stringify(orderB) === JSON.stringify(['すべて', 'z', 'b']), orderB);
+await tabB.close();
+
+// グループのパネルが開いているとき、検索欄の Escape は、検索ではなくパネルを閉じる
+await open(page, [bm(0, { groups: ['g'] })]);
+await page.fill('#search-input', 'T0');
+await page.click('#group-filter-btn');
+await page.focus('#search-input');
+await page.keyboard.press('Escape');
+check('パネルが開いているとき、検索欄の Escape はパネルを閉じ、検索は残る', (await page.$eval('#group-popover', (e) => e.hidden)) && (await page.$eval('#search-input', (e) => e.value)) === 'T0');
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
