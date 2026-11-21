@@ -218,10 +218,19 @@ check('メモが無い行はホスト名、あればメモ', JSON.stringify(subs
 // UNC の行(ドメインなし)は、2 行目が無くても崩れず、行が描画される
 await open(page, [bm(0, { url: '\\\\srv\\share\\a', scheme: 'unc', domain: null, memo: null })]);
 check('UNC の行が描画される', (await titles(page)).length === 1);
+const secondLine = () => page.evaluate(() => { const e = document.querySelector('.card--list .row-memo-preview'); return e ? e.textContent : null; });
+check('UNC の行は、2 行目にパスが出る', (await secondLine()) === '\\\\srv\\share\\a');
+await open(page, [bm(0, { url: 'file:///C:/docs/a.txt', scheme: 'file', domain: null, memo: null })]);
+check('file: の行は、2 行目にパスが出る', (await secondLine()) === 'file:///C:/docs/a.txt');
+
+// 長いタグ 1 個でも、チップはカードの幅を使い、3 行に折れない(2 行以内)
+await open(page, [bm(0, { tags: ['プロジェクト管理システム運用手順書(2026年度版)', 'a', 'b'], loginId: 'u', loginPassword: 'p' })]);
+const chipH = await page.$eval('.card--list .row-tag', (e) => e.getBoundingClientRect().height);
+check('長いタグのチップは 2 行以内', chipH < 50, chipH);
 
 // 長いタグ名: 省略されず、チップが 3 行を超えるぶんだけ +N になる
 const longTag = 'プロジェクト管理システム運用手順書(2026年度版)';
-await open(page, [bm(0, { tags: [longTag, 'a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7', 'a8', 'a9', 'a10', 'a11', 'a12'] })]);
+await open(page, [bm(0, { tags: [longTag].concat(Array.from({ length: 40 }, (_, i) => 'a' + (i + 1))) })]); // チップがカードの全幅を使うので、3 行を超えるだけの数を付ける
 const chipInfo = await page.evaluate(() => {
   const card = document.querySelector('.card--list'); // 行は、付いているタグの区画ごとに出るので、最初の 1 枚だけを見る
   const hidden = card.querySelectorAll('.row-tags .row-tag[hidden]').length;

@@ -784,8 +784,9 @@
   .card--list .row-pin svg { display: block; transform: rotate(35deg); fill: hsl(var(--h, 220) 30% 84%); }
   .card--list .row-top { display: flex; align-items: center; gap: 12px; padding-right: 28px; min-width: 0; }
   .card--list .card-title { flex: 1 1 auto; min-width: 0; margin: 0; }
-  .card--list .row-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: auto; }
-  .card--list .card-footer { margin-top: 0; flex: 0 0 auto; }
+  /* チップと操作アイコンは、同じ行に収まるときだけ並ぶ。チップの欄が狭くなる(200px 未満)ときは、チップがカードの全幅の行になり、操作アイコンは次の行の右端に回る */
+  .card--list .row-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: auto; }
+  .card--list .card-footer { margin-top: 0; margin-left: auto; flex: 0 0 auto; }
   .row-grip { color: var(--ink-soft); opacity: 0.45; font-size: 0.85rem; cursor: grab; flex: 0 0 auto; }
 
   .row-memo-preview {
@@ -869,7 +870,7 @@
   }
 
   /* タグのチップ: 名前は省略せず、収まらなければ折り返す。3 行を超えるぶんは、JS が「+N」にまとめる */
-  .row-tags { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
+  .row-tags { flex: 1 1 200px; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-start; }
   .row-tag, .row-tag-more {
     font-family: var(--font-body);
     font-size: 0.8rem;
@@ -2394,9 +2395,10 @@
     return '<button type="button" tabindex="-1" class="icon-btn" data-action="' + action + '" aria-label="' + label + '" title="' + label + '">' + icon + '</button>';
   }
 
-  // カードの 2 行目。メモがあれば(検索語を強調した)メモ、無ければホスト名(保存値は書き換えない。file:・UNC はホスト名が無いので空)
+  // カードの 2 行目。メモがあれば(検索語を強調した)メモ、無ければホスト名。file:・UNC はホスト名が無いので、パス(URL 欄の値)を出す。保存値は書き換えない
   function subLine(b, tokens) {
     if (b.memo) return highlightText(b.memo, tokens);
+    if (b.scheme === 'file' || b.scheme === 'unc') return escapeHtml(b.url);
     return b.domain ? escapeHtml(b.domain) : '';
   }
 
