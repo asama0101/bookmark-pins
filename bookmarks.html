@@ -283,6 +283,7 @@
     font-size: 0.75rem;
     color: var(--ink-soft);
   }
+  .add-panel .hint input { width: 100%; margin-top: 4px; }
 
   .add-row-2 {
     display: flex;
@@ -973,6 +974,14 @@
       <button class="btn btn-amber" type="submit">保存</button>
     </div>
     <p class="hint">URLは http:// / https:// / file:/// / UNC パス(\\server\share)のいずれかで始まる必要があります。</p>
+    <div class="hint">
+      ページのタイトルも入れるには: <a id="bookmarklet-link" draggable="true">📋 タイトルとURLをコピー</a> をお気に入りバーへドラッグして登録し、追加したいページで押してから、URL 欄に貼り付けてください。外部には何も送りません。
+      <details>
+        <summary>ドラッグできないとき</summary>
+        お気に入りに新しいブックマークを作り、URL 欄に次のコードを貼り付けてください。
+        <input id="bookmarklet-code" type="text" readonly>
+      </details>
+    </div>
   </form>
   <div class="add-row-2">
     <div class="field">
@@ -1250,6 +1259,13 @@
     } catch (e) {
       return '';
     }
+  }
+
+  // 貼り付けた「タイトル+改行+URL」を分ける。空行を除いてちょうど2行で、2行目だけが URL のときに限る
+  function parseTitleAndUrl(text) {
+    var lines = String(text).split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    if (lines.length !== 2 || classifyUrl(lines[0]) || !classifyUrl(lines[1])) return null;
+    return { title: lines[0], url: lines[1] };
   }
 
   // UNCパスはブラウザのfile://ハンドリングに直接渡せないため、表示直前にfile://表記へ変換する。
@@ -2500,6 +2516,15 @@
   /* ---------- 追加フォーム ---------- */
 
   var addPanel = document.getElementById('add-panel');
+  // 見ているページのタイトルと URL を「タイトル+改行+URL」でクリップボードへ入れるブックマークレットのコード(javascript: を除く)
+  var TITLE_COPY_BOOKMARKLET = "(function(){var t=document.title.replace(/\\s+/g,' ').trim()+'\\n'+location.href;function f(){var a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();document.execCommand('copy');a.remove();}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).catch(f);}else{f();}})();";
+  var bookmarkletLink = document.getElementById('bookmarklet-link');
+  var bookmarkletCode = document.getElementById('bookmarklet-code');
+  bookmarkletLink.href = 'javascript:' + TITLE_COPY_BOOKMARKLET;
+  bookmarkletLink.addEventListener('click', function (e) { e.preventDefault(); }); // アプリ自身のページでは実行しない(ドラッグで登録するためのリンク)
+  bookmarkletCode.defaultValue = TITLE_COPY_BOOKMARKLET; // 保存後の addForm.reset() で空に戻らないよう、既定値として持つ
+  bookmarkletCode.addEventListener('focus', function () { bookmarkletCode.select(); });
+
   var addForm = document.getElementById('add-form');
   var newUrlInput = document.getElementById('new-url');
   var newTitleInput = document.getElementById('new-title');
@@ -2530,6 +2555,15 @@
     var scheme = classifyUrl(newUrlInput.value.trim());
     if (!scheme) return;
     newTitleInput.value = deriveTentativeTitle(newUrlInput.value.trim(), scheme);
+  });
+  // 「タイトル+改行+URL」を貼ったときは、URL とタイトルの両方を入れる(input を出さないので、上のホスト名の自動補完は動かない)
+  newUrlInput.addEventListener('paste', function (e) {
+    var parsed = parseTitleAndUrl(e.clipboardData.getData('text'));
+    if (!parsed) return;
+    e.preventDefault();
+    newUrlInput.value = parsed.url;
+    newTitleInput.value = parsed.title;
+    previewAddFormTags();
   });
   [newUrlInput, newTitleInput, newMemoInput].forEach(function (el) {
     el.addEventListener('input', previewAddFormTags);

@@ -81,6 +81,88 @@ await open(page, [bm(0, { url: 'http://intranet-hr/', domain: 'intranet-hr' }), 
 await page.waitForTimeout(300);
 check('単語だけのホスト名は Google に送らない', !reqs.some((u) => u.includes('favicons') && u.includes('intranet-hr')), reqs);
 
+// 追加フォームの URL 欄への貼り付け: 「タイトル+改行+URL」の2行だけ、タイトルも受け取る
+async function paste(p, text) {
+  return p.$eval('#new-url', (el, t) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', t);
+    const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
+    el.dispatchEvent(ev);
+    return ev.defaultPrevented;
+  }, text);
+}
+async function freshAddForm(p, data) {
+  await open(p, data || []);
+  await p.click('#toggle-add-btn');
+}
+const fields = (p) => p.evaluate(() => ({ url: document.getElementById('new-url').value, title: document.getElementById('new-title').value }));
+
+await freshAddForm(page);
+let pr = await paste(page, 'Example Domain\r\nhttps://example.com/');
+let f = await fields(page);
+check('2行の貼り付けで URL とタイトルが入る', pr === true && f.url === 'https://example.com/' && f.title === 'Example Domain', { pr, f });
+
+await freshAddForm(page);
+await page.fill('#new-title', 'old');
+await paste(page, 'Example Domain\r\nhttps://example.com/');
+check('貼り付けはタイトル欄を上書きする', (await fields(page)).title === 'Example Domain');
+
+await freshAddForm(page);
+pr = await paste(page, '\n  T  \n\n https://a.example.com \n');
+f = await fields(page);
+check('前後の空白・空行・LF だけでも振り分ける', pr === true && f.title === 'T' && f.url === 'https://a.example.com', { pr, f });
+
+for (const [name, text] of [
+  ['URL が2行は振り分けない', 'https://a.com\nhttps://b.com'],
+  ['URL だけは標準の貼り付け', 'https://a.com'],
+  ['空のタイトルは標準の貼り付け', '\nhttps://a.com'],
+  ['3行は標準の貼り付け', 'a\nb\nhttps://a.com'],
+  ['2行目が URL でなければ標準(bar)', 'foo\nbar'],
+  ['2行目が URL でなければ標準(javascript:)', 'foo\njavascript:alert(1)'],
+]) {
+  await freshAddForm(page);
+  pr = await paste(page, text);
+  check(name, pr === false && (await fields(page)).title === '', { pr });
+}
+
+await freshAddForm(page, [bm(0, { tags: ['ai'] })]);
+await paste(page, 'ai の記事\nhttps://x.example.com/');
+check('貼り付けでタグの事前選択が更新される', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())).startsWith('ai'));
+
+// コピー用ブックマークレットの登録リンク
+await freshAddForm(page);
+const href = await page.$eval('#bookmarklet-link', (e) => e.getAttribute('href')).catch(() => '');
+check('登録用リンクは javascript: で始まる', href.startsWith('javascript:'), href);
+const linkPrevented = await page.$eval('#bookmarklet-link', (el) => {
+  const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+  el.dispatchEvent(ev);
+  return ev.defaultPrevented;
+}).catch(() => null);
+check('登録用リンクのクリックは何も実行しない', linkPrevented === true, linkPrevented);
+const shownCode = await page.$eval('#bookmarklet-code', (e) => e.value).catch(() => null);
+check('表示用コードがリンクと同じ', shownCode !== null && href === 'javascript:' + shownCode, { shownCode });
+
+// 実際のページでコードを動かし、クリップボードの内容をアプリへ貼る(外部通信なし。ページは route で返す)
+await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+await ctx.route('https://page.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>  Foo \n Bar </title><p>x</p>' }));
+const src = await ctx.newPage();
+await src.goto('https://page.test/');
+await src.bringToFront();
+await src.evaluate(shownCode || '');
+const clip = await src.evaluate(() => navigator.clipboard.readText()).catch((e) => String(e));
+check('ブックマークレットは「タイトル+改行+URL」をコピーする', JSON.stringify(clip.split(/\r?\n/)) === JSON.stringify(['Foo Bar', 'https://page.test/']), clip);
+await src.close();
+await page.bringToFront();
+await freshAddForm(page);
+await paste(page, clip);
+f = await fields(page);
+check('コピーした内容を貼ると URL とタイトルが入る', f.url === 'https://page.test/' && f.title === 'Foo Bar', f);
+
+// 保存でフォームがリセットされても、手動登録用のコード欄は空にならない
+await open(page, []);
+await add(page, 'SAVED');
+check('保存後もコード欄が空でない', (await page.$eval('#bookmarklet-code', (e) => e.value)).length > 0);
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
