@@ -283,7 +283,7 @@
     font-size: 0.75rem;
     color: var(--ink-soft);
   }
-  .add-panel .hint input { width: 100%; margin-top: 4px; }
+  .add-panel > .hint { margin-top: 12px; max-width: 1100px; }
 
   .add-row-2 {
     display: flex;
@@ -974,15 +974,18 @@
       <button class="btn btn-amber" type="submit">保存</button>
     </div>
     <p class="hint">URLは http:// / https:// / file:/// / UNC パス(\\server\share)のいずれかで始まる必要があります。</p>
-    <div class="hint">
-      ページのタイトルも入れるには: <a id="bookmarklet-link" draggable="true">📋 タイトルとURLをコピー</a> をお気に入りバーへドラッグして登録し、追加したいページで押してから、URL 欄に貼り付けてください。外部には何も送りません。
-      <details>
-        <summary>ドラッグできないとき</summary>
-        お気に入りに新しいブックマークを作り、URL 欄に次のコードを貼り付けてください。
-        <input id="bookmarklet-code" type="text" readonly>
-      </details>
-    </div>
   </form>
+  <div class="hint">
+    ページのタイトルも入れるには: <a id="bookmarklet-link" draggable="true">📋 タイトルとURLをコピー</a> をお気に入りバーへドラッグして登録し、追加したいページで押してから、URL 欄に貼り付けてください。外部には何も送りません。
+    <details>
+      <summary>ドラッグできないとき</summary>
+      お気に入りに新しいブックマークを作り、URL 欄に次のコードを貼り付けてください。
+      <div class="field">
+        <label for="bookmarklet-code">ブックマークレットのコード</label>
+        <input id="bookmarklet-code" type="text" readonly>
+      </div>
+    </details>
+  </div>
   <div class="add-row-2">
     <div class="field">
       <label for="new-login-id">ログインID</label>
@@ -2522,7 +2525,7 @@
   var bookmarkletCode = document.getElementById('bookmarklet-code');
   bookmarkletLink.href = 'javascript:' + TITLE_COPY_BOOKMARKLET;
   bookmarkletLink.addEventListener('click', function (e) { e.preventDefault(); }); // アプリ自身のページでは実行しない(ドラッグで登録するためのリンク)
-  bookmarkletCode.defaultValue = TITLE_COPY_BOOKMARKLET; // 保存後の addForm.reset() で空に戻らないよう、既定値として持つ
+  bookmarkletCode.value = TITLE_COPY_BOOKMARKLET;
   bookmarkletCode.addEventListener('focus', function () { bookmarkletCode.select(); });
 
   var addForm = document.getElementById('add-form');

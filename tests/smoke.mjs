@@ -163,6 +163,47 @@ await open(page, []);
 await add(page, 'SAVED');
 check('保存後もコード欄が空でない', (await page.$eval('#bookmarklet-code', (e) => e.value)).length > 0);
 
+// コード欄(手動登録用): フォームの外にあり、ラベルがあり、他の入力欄と同じ見た目
+await freshAddForm(page);
+await page.fill('#new-url', 'https://enter.example/');
+await page.fill('#new-title', 'E');
+await page.evaluate(() => { document.getElementById('bookmarklet-code').closest('details').open = true; });
+await page.focus('#bookmarklet-code');
+await page.keyboard.press('Enter');
+const savedCount = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data') || '[]').length);
+check('コード欄で Enter を押しても保存されない', savedCount === 0 && (await page.$eval('#add-panel', (e) => !e.hidden)), { savedCount });
+check('コード欄にラベルがある', await page.$eval('label[for="bookmarklet-code"]', (e) => e.textContent.trim().length > 0).catch(() => false));
+const look = await page.evaluate(() => {
+  const s = (id) => { const c = getComputedStyle(document.getElementById(id)); return [c.paddingLeft, c.borderTopColor, c.fontSize].join('|'); };
+  return [s('bookmarklet-code'), s('new-url')];
+});
+check('コード欄の見た目が他の入力欄と同じ', look[0] === look[1], look);
+
+// 実際の貼り付け(Ctrl+V)と、javascript: の href としての実行
+async function realPaste(p, text) {
+  await p.evaluate((t) => navigator.clipboard.writeText(t), text);
+  await p.focus('#new-url');
+  await p.keyboard.press('Control+V');
+}
+await freshAddForm(page);
+await realPaste(page, 'Example Domain\r\nhttps://example.com/');
+f = await fields(page);
+check('Ctrl+V で、2行の貼り付けが URL とタイトルに入る', f.url === 'https://example.com/' && f.title === 'Example Domain', f);
+await freshAddForm(page);
+await realPaste(page, 'https://a.example.com/');
+f = await fields(page);
+check('Ctrl+V で、URL だけの貼り付けはホスト名がタイトルになる', f.url === 'https://a.example.com/' && f.title === 'a.example.com', f);
+
+const linkHref = await page.$eval('#bookmarklet-link', (e) => e.getAttribute('href'));
+const src2 = await ctx.newPage();
+await src2.goto('https://page.test/');
+await src2.bringToFront();
+await src2.evaluate((h) => { const a = document.createElement('a'); a.href = h; document.body.appendChild(a); a.click(); }, linkHref);
+await src2.waitForTimeout(300);
+const clip2 = await src2.evaluate(() => navigator.clipboard.readText()).catch((e) => String(e));
+check('登録用リンクの href としてコードを実行しても、タイトルと URL がコピーされる', JSON.stringify(clip2.split(/\r?\n/)) === JSON.stringify(['Foo Bar', 'https://page.test/']), clip2);
+await src2.close();
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
