@@ -604,6 +604,131 @@ await page.click('#tag-filter-btn');
 const pop = await page.$eval('#tag-popover', (e) => ({ h: e.getBoundingClientRect().height, vh: window.innerHeight, sh: e.scrollHeight, ch: e.clientHeight }));
 check('タグが 60 個でも、パネルは画面に収まりスクロールできる', pop.h <= pop.vh && pop.sh > pop.ch, pop);
 
+// 「グループなし」を選ぶと、グループの無い行だけになり、ボタンが「グループ: グループなし」
+await open(page, [bm(0, { groupName: 'g' }), bm(1)]);
+await page.click('#group-filter-btn');
+await page.click('#group-popover [data-filter-none]');
+check('「グループなし」を選ぶと、グループの無い行だけ', JSON.stringify(await titles(page)) === JSON.stringify(['T1']) && (await page.$eval('#group-filter-btn', (e) => e.textContent)) === 'グループ: グループなし', await titles(page));
+
+// ===== グループの色(タグの色とは別に持つ) =====
+const styleH = (p, sel) => p.$eval(sel, (e) => e.style.getPropertyValue('--h').trim());
+// colors はグループの色の保存値(省略時は消す)。タグの色は消す
+async function openColors(p, data, colors) {
+  await open(p, data);
+  await p.evaluate((c) => {
+    localStorage.removeItem('bookmarks_tag_colors');
+    if (c) localStorage.setItem('bookmarks_group_colors', JSON.stringify(c)); else localStorage.removeItem('bookmarks_group_colors');
+  }, colors);
+  await p.reload();
+}
+async function openGroupManage(p) {
+  await p.click('#tag-manage-open-btn');
+  await p.click('[data-manage-tab="group"]');
+}
+const colorBtn = (key) => '#tag-manage-list .tag-manage-row[data-tag="' + key + '"] .tag-color-btn';
+async function slide(p, hue) {
+  await p.$eval('#tag-manage-list .tag-color-range', (e, h) => {
+    e.value = String(h);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+  }, hue);
+}
+
+// (a) グループのタブの色の丸・基本の色・「自動」・スライダー
+await openColors(page, [bm(0, { groupName: 'g' }), bm(1, { groupName: 'h' })]);
+await openGroupManage(page);
+check('グループの行に色の丸がある', (await page.$(colorBtn('g'))) !== null);
+await page.click(colorBtn('g'));
+check('グループの色の丸を押すと、色の選択が開く', (await page.$$('#tag-manage-list .tag-color-swatch')).length === 12);
+await page.click('#tag-manage-list .tag-color-swatch[data-hue="140"]');
+const gc1 = await storedJson(page, 'bookmarks_group_colors');
+check('基本の色を選ぶと、丸の色が変わり、bookmarks_group_colors に保存され、区画も同じ色', (await styleH(page, colorBtn('g'))) === '140' && JSON.stringify(gc1) === JSON.stringify({ g: 140 }) && (await styleH(page, '.tag-group[data-group="g"]')) === '140', gc1);
+await page.click('#tag-manage-list [data-action="auto-tag-color"]');
+check('「自動」で、キーが bookmarks_group_colors から消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({}), await storedJson(page, 'bookmarks_group_colors'));
+await slide(page, 77);
+check('スライダーを離すと、グループの色が保存される', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ g: 77 }) && (await styleH(page, '.tag-group[data-group="g"]')) === '77', await storedJson(page, 'bookmarks_group_colors'));
+
+// (g) 色の選択を開いている間は、その行の draggable が外れる。Escape は色の選択だけを閉じる
+const dragOf = (key) => page.$eval('#tag-manage-list .tag-manage-row[data-tag="' + key + '"]', (e) => e.getAttribute('draggable'));
+check('色の選択を開いている行は draggable が外れる(ほかの行はそのまま)', (await dragOf('g')) === null && (await dragOf('h')) === 'true');
+await page.click(colorBtn('g'));
+check('色の選択を閉じると draggable が戻る', (await dragOf('g')) === 'true' && (await page.$$('#tag-manage-list .tag-color-picker')).length === 0);
+await page.click(colorBtn('g'));
+await page.keyboard.press('Escape');
+check('Escape で色の選択だけが閉じる(モーダルは開いたまま)', (await page.$$('#tag-manage-list .tag-color-picker')).length === 0 && !(await page.$eval('#tag-manage-overlay', (e) => e.hidden)) && (await dragOf('g')) === 'true');
+
+// (b) 同名のタグとグループの色は、互いに影響しない
+await openColors(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
+await page.click('#tag-filter-btn');
+const sameTagHue = await styleH(page, '#tag-popover [data-filter-key="same"]');
+await page.keyboard.press('Escape');
+await openGroupManage(page);
+await page.click(colorBtn('same'));
+await slide(page, 100);
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.click('#tag-filter-btn');
+check('グループの色を変えても、同名のタグの色は変わらない', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_colors'))) === null && (await styleH(page, '#tag-popover [data-filter-key="same"]')) === sameTagHue, sameTagHue);
+await page.keyboard.press('Escape');
+await page.click('#group-filter-btn');
+check('グループのパネルの色の点は、グループの色', (await styleH(page, '#group-popover [data-filter-key="same"]')) === '100');
+await page.keyboard.press('Escape');
+await page.click('#tag-manage-open-btn');
+await page.click(colorBtn('same'));
+await slide(page, 200);
+check('タグの色を変えても、同名のグループの区画の色は変わらない', (await styleH(page, '.tag-group[data-group="same"]')) === '100' && JSON.stringify(await storedJson(page, 'bookmarks_tag_colors')) === JSON.stringify({ same: 200 }) && JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ same: 100 }));
+
+// (c) 改名で色が新しいキーへ移る。統合では既存の色が残る。削除・最後の 1 件の移動で消える
+async function renameGroupTo(p, key, name) {
+  await p.click('#tag-manage-list [data-action="edit-tag"][data-tag="' + key + '"]');
+  await p.fill('.tag-rename-input', name);
+  await p.click('.tag-rename-form button[type=submit]');
+  await p.click('[data-action="apply-rename"]');
+}
+await openColors(page, [bm(0, { groupName: 'a' }), bm(1, { groupName: 'b' }), bm(2, { groupName: 'c' })], { a: 10, b: 20, c: 30 });
+await openGroupManage(page);
+await renameGroupTo(page, 'c', 'd');
+check('グループの改名で、色が新しいキーへ移る', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10, b: 20, d: 30 }), await storedJson(page, 'bookmarks_group_colors'));
+await renameGroupTo(page, 'd', 'A');
+check('統合では、既存のグループの色が残る', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10, b: 20 }), await storedJson(page, 'bookmarks_group_colors'));
+await page.click('#tag-manage-list [data-action="delete-tag"][data-tag="b"]');
+await page.click('[data-action="confirm-delete-tag"]');
+check('グループの削除で、色が消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10 }), await storedJson(page, 'bookmarks_group_colors'));
+await openColors(page, [bm(0, { groupName: 'a' }), bm(1, { groupName: 'x' })], { a: 10, x: 5 });
+await page.click('.tag-group[data-group="x"] .card--list [data-action="edit"]');
+await page.fill('#edit-group-text', 'a');
+await page.click('[data-edit-form] button[type=submit]');
+check('最後の 1 件が別のグループへ移ると、色が消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10 }), await storedJson(page, 'bookmarks_group_colors'));
+
+// (d) エクスポート・インポート
+await openColors(page, [bm(0, { groupName: 'g' })], { g: 42 });
+const [dlC] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
+const exportedC = JSON.parse(await (await import('node:fs/promises')).readFile(await dlC.path(), 'utf8'));
+check('エクスポートに groupColors が入る', JSON.stringify(exportedC.groupColors) === JSON.stringify({ g: 42 }), exportedC.groupColors);
+await importJson(page, { version: 4, bookmarks: ['a', 'b', 'c', 'd', 'e'].map((g, i) => bm(i, { groupName: g })), groupColors: { a: 400, b: -10, c: 'x', d: null, e: 120 } });
+check('インポートした groupColors は整えて保存される', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 40, b: 350, e: 120 }), await storedJson(page, 'bookmarks_group_colors'));
+await importJson(page, { version: 4, bookmarks: [bm(0, { groupName: 'a' })] });
+check('groupColors の無いファイルをインポートすると、グループの色は空', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({}), await storedJson(page, 'bookmarks_group_colors'));
+
+// (e) storage イベントで、別のタブのグループの色を取り込む
+await openColors(page, [bm(0, { groupName: 'g' })]);
+await page.evaluate(() => {
+  localStorage.setItem('bookmarks_group_colors', JSON.stringify({ g: 50 }));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'bookmarks_group_colors' }));
+});
+check('storage イベントで、グループの色を取り込む', (await styleH(page, '.tag-group[data-group="g"]')) === '50');
+
+// (f) 特殊文字のグループ名でも、色の丸とパネルの行が壊れない
+await openColors(page, [bm(0, { groupName: '<b>&"' })]);
+await page.click('#group-filter-btn');
+const specialG = await page.$eval('#group-popover [data-filter-key] .filter-row-name', (e) => e.textContent);
+await page.keyboard.press('Escape');
+await openGroupManage(page);
+const specialLabel = await page.$eval('#tag-manage-list .tag-color-btn', (e) => e.getAttribute('aria-label'));
+await page.click('#tag-manage-list .tag-color-btn');
+const specialRange = await page.$eval('#tag-manage-list .tag-color-range', (e) => e.getAttribute('aria-label'));
+check('特殊文字のグループ名で、色の丸・スライダー・パネルの行が壊れない', specialG === '<b>&"' && specialLabel === '<b>&"の色を選ぶ' && specialRange === '<b>&"の色相', { specialG, specialLabel, specialRange });
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

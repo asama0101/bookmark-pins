@@ -260,7 +260,7 @@
   .filter-row:hover { background: var(--hover); }
   .filter-row:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
   .filter-row[aria-pressed="true"] { background: var(--amber); color: #fff; }
-  /* 色の点(--h は tagHue() の色相。「タグなし」「グループなし」は既定の色相。彩度は落とす) */
+  /* 色の点(--h は tagHue()・groupHue() の色相。「タグなし」「グループなし」は既定の色相。彩度は落とす) */
   .filter-row-dot { flex: none; width: 9px; height: 9px; margin-top: 0.5em; border-radius: 50%; background: hsl(var(--h, 220) 38% 52%); }
   .filter-row[aria-pressed="true"] .filter-row-dot { background: #fff; }
   .filter-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* 長い名前も、省略せず全文で出す */
@@ -1202,7 +1202,7 @@
   // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneTagOrder() が外す
   var TAG_COLOR_KEY = 'bookmarks_tag_colors';
   var TAG_COLOR_PRESETS = [0, 25, 45, 75, 140, 165, 190, 215, 245, 275, 305, 335]; // タグ管理で選べる基本の色(色相)
-  function sanitizeTagColors(raw) {
+  function sanitizeColors(raw) {
     var out = Object.create(null);
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       Object.keys(raw).forEach(function (k) {
@@ -1213,11 +1213,21 @@
     return out;
   }
   var tagColors = (function () {
-    try { return sanitizeTagColors(JSON.parse(localStorage.getItem(TAG_COLOR_KEY))); } catch (e) { return Object.create(null); }
+    try { return sanitizeColors(JSON.parse(localStorage.getItem(TAG_COLOR_KEY))); } catch (e) { return Object.create(null); }
   })();
 
   function saveTagColors() {
     localStorage.setItem(TAG_COLOR_KEY, JSON.stringify(tagColors));
+  }
+
+  // グループごとの色(グループのキー → 色相 0〜359)。タグの色とは別に持つ(同名のタグとグループは別の色にできる)。持ち方はタグの色と同じ
+  var GROUP_COLOR_KEY = 'bookmarks_group_colors';
+  var groupColors = (function () {
+    try { return sanitizeColors(JSON.parse(localStorage.getItem(GROUP_COLOR_KEY))); } catch (e) { return Object.create(null); }
+  })();
+
+  function saveGroupColors() {
+    localStorage.setItem(GROUP_COLOR_KEY, JSON.stringify(groupColors));
   }
 
   function makeId() {
@@ -1468,6 +1478,9 @@
     });
     var usedGroups = Object.create(null);
     bookmarks.forEach(function (b) { if (b.groupName) usedGroups[tagKey(b.groupName)] = true; });
+    Object.keys(groupColors).forEach(function (k) {
+      if (!usedGroups[k]) { delete groupColors[k]; if (!syncingFromStorage) saveGroupColors(); }
+    });
     var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
@@ -1792,6 +1805,17 @@
   // タグの色相(0〜359)。タグ管理で選んだ色があればそれ、なければタグのキーから決める(同じタグはいつも同じ色)
   function tagHue(key) {
     if (tagColors[key] !== undefined) return tagColors[key];
+    return autoHue(key);
+  }
+
+  // グループの色相。グループの管理で選んだ色があればそれ、なければグループのキーから決める(タグの色は見ない)
+  function groupHue(key) {
+    if (groupColors[key] !== undefined) return groupColors[key];
+    return autoHue(key);
+  }
+
+  // 選んだ色が無いときの色相(キーから決める)
+  function autoHue(key) {
     var h = 0;
     for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
     return h;
@@ -1861,7 +1885,7 @@
     var none = kind === 'tag' ? countUntagged() : countUngrouped();
     var html = filterRowHtml('data-filter-all="1"', 'すべて', bookmarks.length, cur === null, null);
     items.forEach(function (t) {
-      html += filterRowHtml('data-filter-key="' + escapeHtml(t.key) + '"', t.name, t.count, cur === t.key, tagHue(t.key));
+      html += filterRowHtml('data-filter-key="' + escapeHtml(t.key) + '"', t.name, t.count, cur === t.key, kind === 'tag' ? tagHue(t.key) : groupHue(t.key));
     });
     if (none) html += filterRowHtml('data-filter-none="1"', p.noneName, none, cur === '');
     p.popover.innerHTML = html;
@@ -1964,7 +1988,7 @@
 
     container.innerHTML = items.length
       ? groupItems(items).map(function (g) {
-          return '<section class="tag-group" data-group="' + escapeHtml(g.key) + '"' + (g.key ? ' style="--h:' + tagHue(g.key) + '"' : '') + '>' +
+          return '<section class="tag-group" data-group="' + escapeHtml(g.key) + '"' + (g.key ? ' style="--h:' + groupHue(g.key) + '"' : '') + '>' +
             '<h3 class="tag-group-head">' + escapeHtml(g.name) + '<span class="tag-group-count">' + g.items.length + '</span></h3>' +
             g.items.map(rowHtml).join('') + '</section>';
         }).join('')
@@ -2059,7 +2083,7 @@
   }
 
   // タグ管理モーダルのリスト全体を再描画する。render()から、モーダルが開いている間だけ呼ばれる。
-  // 「タグ」「グループ」の 2 つのタブ(state.manageTab)。タグのタブは、改名・削除・色。グループのタブは、改名・削除・並べ替え(色は持たない)。
+  // 「タグ」「グループ」の 2 つのタブ(state.manageTab)。タグのタブは、改名・削除・色。グループのタブは、改名・削除・色・並べ替え。
   // 行・ボタンのデータ属性と data-action の名前は、2 つのタブで共通。どちらの操作かは state.manageTab で振り分ける。
   function renderTagManageModal() {
     var isGroup = state.manageTab === 'group';
@@ -2122,27 +2146,32 @@
     '</li>';
   }
 
-  // グループの行: グリップ(ドラッグで並べ替え)・名前・件数・▲▼・改名・削除。色は持たない
+  // グループの行: 色・グリップ(ドラッグで並べ替え)・名前・件数・▲▼・改名・削除。
+  // 色を選んでいる間は、スライダーを動かせるよう draggable を外す
   function renderGroupManageRow(g, index, total) {
     var key = escapeHtml(g.key);
     var name = escapeHtml(g.name);
     if (state.confirmRename === g.key) return renderRenameConfirmRow(g);
     if (state.editingTag === g.key) return renderRenameFormRow(g.key, g.name);
-    return '<li class="tag-manage-row" data-tag="' + key + '" draggable="true">' +
+    var picking = state.colorEditing === g.key;
+    return '<li class="tag-manage-row" data-tag="' + key + '"' + (picking ? '' : ' draggable="true"') + '>' +
+      '<button type="button" class="tag-color-btn" data-action="toggle-tag-color" data-tag="' + key + '" style="--h:' + groupHue(g.key) + '" aria-label="' + name + 'の色を選ぶ" aria-expanded="' + picking + '"></button>' +
       '<span class="row-grip" aria-hidden="true">⠿</span>' +
       '<span class="tag-manage-name">' + name + '</span>' +
       '<span class="tag-manage-count">' + g.count + '</span>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-up" data-tag="' + key + '" aria-label="' + name + 'を上へ"' + (index === 0 ? ' disabled' : '') + '>▲</button>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-down" data-tag="' + key + '" aria-label="' + name + 'を下へ"' + (index === total - 1 ? ' disabled' : '') + '>▼</button>' +
       manageActionButtons(g) +
+      (picking ? renderTagColorPicker(g) : '') +
     '</li>';
   }
 
-  // 色の選び方: 基本の12色(丸)・「自動」(タグ名から決める)・色相のスライダー
+  // 色の選び方: 基本の12色(丸)・「自動」(名前から決める)・色相のスライダー。タグ・グループのどちらの色かは state.manageTab で決める
   function renderTagColorPicker(t) {
     var key = escapeHtml(t.key);
-    var hue = tagHue(t.key);
-    var isAuto = tagColors[t.key] === undefined;
+    var isGroup = state.manageTab === 'group';
+    var hue = isGroup ? groupHue(t.key) : tagHue(t.key);
+    var isAuto = (isGroup ? groupColors : tagColors)[t.key] === undefined;
     return '<div class="tag-color-picker">' +
       TAG_COLOR_PRESETS.map(function (h) {
         return '<button type="button" class="tag-color-swatch" data-action="set-tag-color" data-tag="' + key + '" data-hue="' + h + '" style="--h:' + h + '" aria-label="色相 ' + h + '" aria-pressed="' + (!isAuto && hue === h) + '"></button>';
@@ -2221,8 +2250,9 @@
       state.confirmRename = null;
       state.renameDraft = null;
     } else if (action === 'set-tag-color' || action === 'auto-tag-color') {
-      if (action === 'set-tag-color') tagColors[key] = Number(btn.getAttribute('data-hue')); else delete tagColors[key];
-      saveTagColors();
+      var colors = manageColors();
+      if (action === 'set-tag-color') colors[key] = Number(btn.getAttribute('data-hue')); else delete colors[key];
+      saveManageColors();
       render(); // タグ管理が開いている間は、render() がモーダルも描き直す
       var again = tagManageList.querySelector('[data-action="' + action + '"]' + (action === 'set-tag-color' ? '[data-hue="' + btn.getAttribute('data-hue') + '"]' : ''));
       if (again) again.focus();
@@ -2241,6 +2271,14 @@
     renderTagManageModal();
   });
 
+  // 管理モーダルで選ぶ色の入れ物(いまのタブがグループならグループの色、タグならタグの色)と、その保存
+  function manageColors() {
+    return state.manageTab === 'group' ? groupColors : tagColors;
+  }
+  function saveManageColors() {
+    if (state.manageTab === 'group') saveGroupColors(); else saveTagColors();
+  }
+
   // スライダーは、動かしている間は行の色の見本だけを変え、離したとき(change)に保存して描き直す
   tagManageList.addEventListener('input', function (e) {
     if (!e.target.classList.contains('tag-color-range')) return;
@@ -2249,8 +2287,8 @@
   });
   tagManageList.addEventListener('change', function (e) {
     if (!e.target.classList.contains('tag-color-range')) return;
-    tagColors[e.target.getAttribute('data-tag')] = Number(e.target.value);
-    saveTagColors();
+    manageColors()[e.target.getAttribute('data-tag')] = Number(e.target.value);
+    saveManageColors();
     render();
     var again = tagManageList.querySelector('.tag-color-range');
     if (again) again.focus();
@@ -2340,6 +2378,11 @@
     if (state.filterGroup === oldKey) state.filterGroup = newKey; // 絞り込みは新しい名前へ引き継ぐ
     groupOrder = sanitizeTagOrder(groupOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
     saveGroupOrder();
+    if (newKey !== oldKey && groupColors[oldKey] !== undefined) { // 色も新しい名前へ引き継ぐ(統合のときは、既存のグループの色を優先する)
+      if (groupColors[newKey] === undefined) groupColors[newKey] = groupColors[oldKey];
+      delete groupColors[oldKey];
+      saveGroupColors();
+    }
     saveData(bookmarks);
     render();
   }
@@ -2910,7 +2953,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, groupOrder: groupOrder, tagColors: tagColors, groupColors: groupColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -2940,7 +2983,7 @@
         alert('JSONの読み込みに失敗しました。ファイルの内容を確認してください。');
         return;
       }
-      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, groupOrder, tagColors } のオブジェクト
+      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, groupOrder, tagColors, groupColors } のオブジェクト
       var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.bookmarks) ? parsed.bookmarks : null);
       if (!list) {
         alert('インポートするJSONはブックマークの配列か、bookmarks を含むオブジェクトである必要があります。');
@@ -2948,7 +2991,8 @@
       }
       // groupOrder は、version 3 以降だけ、グループのキーとして読む(旧版の groupOrder は、タグごとの区画の順だった)
       var importedGroupOrder = !Array.isArray(parsed) && parsed.version >= 3 ? sanitizeTagOrder(parsed.groupOrder) : [];
-      var importedColors = sanitizeTagColors(Array.isArray(parsed) ? null : parsed.tagColors);
+      var importedColors = sanitizeColors(Array.isArray(parsed) ? null : parsed.tagColors);
+      var importedGroupColors = sanitizeColors(Array.isArray(parsed) ? null : parsed.groupColors);
 
       var sanitized = list.map(sanitizeBookmark).filter(Boolean);
       sanitized.forEach(function (b, i) { b.order = i; });
@@ -2963,9 +3007,11 @@
       bookmarks = sanitized;
       groupOrder = importedGroupOrder;
       tagColors = importedColors;
+      groupColors = importedGroupColors;
       saveData(bookmarks);
       saveGroupOrder();
       saveTagColors();
+      saveGroupColors();
       state.editingId = null;
       render();
     };
@@ -3073,7 +3119,8 @@
   window.addEventListener('storage', function (e) {
     if (e.key === STORAGE_KEY) bookmarks = loadData();
     else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
-    else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
+    else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
+    else if (e.key === GROUP_COLOR_KEY) { try { groupColors = sanitizeColors(JSON.parse(localStorage.getItem(GROUP_COLOR_KEY))); } catch (err) { groupColors = Object.create(null); } }
     else return;
     syncingFromStorage = true;
     try { render(); } finally { syncingFromStorage = false; }
