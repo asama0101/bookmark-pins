@@ -661,32 +661,7 @@
   .tag-confirm-actions { display: flex; gap: 6px; justify-content: flex-end; }
   .tag-confirm-actions .btn, .tag-confirm-actions .btn-quiet { padding: 4px 10px; font-size: 0.75rem; }
 
-  /* ---------- 自動タグ付けモーダル ---------- */
-
   .modal.modal-wide { max-width: 640px; }
-  .auto-tag-hint { font-size: 0.78rem; color: var(--ink-soft); margin: 0 0 8px; }
-  .auto-tag-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-  .auto-tag-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    padding: 8px 12px;
-    border: none;
-    border-radius: 14px;
-    background: var(--ivory);
-    font-size: 0.9rem;
-    cursor: pointer;
-  }
-  .auto-tag-row input { margin-top: 3px; flex: none; }
-  .auto-tag-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .auto-tag-name { font-family: var(--font-display); font-weight: 700; overflow-wrap: anywhere; }
-  .auto-tag-meta { font-size: 0.76rem; color: var(--ink-soft); overflow-wrap: anywhere; }
-  .auto-tag-removed { color: var(--wine); font-weight: 700; }
-  .auto-tag-toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-  .auto-tag-toolbar .btn-quiet { padding: 3px 10px; font-size: 0.75rem; }
-  .auto-tag-empty { font-size: 0.85rem; color: var(--ink-soft); }
-  .auto-tag-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-  .auto-tag-actions .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
   .search-no-results {
     grid-column: 1 / -1;
@@ -1025,8 +1000,7 @@
   <div class="header-actions">
     <button class="btn btn-amber" id="toggle-add-btn" type="button">+ 追加</button>
     <button class="btn btn-ghost btn-compact" id="group-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="group-popover">グループ</button>
-    <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">タグ管理</button>
-    <button class="btn btn-ghost btn-compact" id="auto-tag-btn" type="button">自動タグ付け</button>
+    <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">管理</button>
     <button class="btn btn-ghost" id="export-btn" type="button">エクスポート</button>
     <button class="btn btn-ghost" id="import-btn" type="button">インポート</button>
     <button class="btn btn-ghost" id="help-btn" type="button">ヘルプ</button>
@@ -1053,10 +1027,9 @@
       <div class="chip-list" id="new-tag-suggest"></div>
     </div>
     <div class="field">
-      <label for="new-group-text">グループ(Enter かカンマで確定)</label>
-      <div class="chip-list" id="new-group-chips"></div>
-      <input id="new-group-text" type="text" placeholder="グループを入力" autocomplete="off">
-      <div class="chip-list" id="new-group-suggest"></div>
+      <label for="new-group-text">グループ</label>
+      <input id="new-group-text" type="text" list="group-options" autocomplete="off" placeholder="グループを入力">
+      <datalist id="group-options"></datalist>
     </div>
     <div class="field">
       <button class="btn btn-amber" type="submit">保存</button>
@@ -1098,7 +1071,7 @@
   <h2>キーボードショートカット</h2>
   <dl class="help-grid">
     <dt><kbd>/</kbd></dt><dd>検索ボックスへフォーカス</dd>
-    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でグループ・タグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; グループのパネル &rarr; 自動タグ付け &rarr; タグ管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
+    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でグループ・タグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; グループのパネル &rarr; 管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
   </dl>
 </section>
 
@@ -1132,7 +1105,7 @@
 </div>
 
 <footer class="data-controls">
-  <span class="app-version">bookmark-pins v0.3.0</span>
+  <span class="app-version">bookmark-pins v4.0.0</span>
   <span>データはこの端末のブラウザ内(localStorage)に保存されます。</span>
 </footer>
 
@@ -1149,16 +1122,6 @@
     <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
     <p class="tag-manage-empty" id="tag-manage-empty" hidden>タグがありません。ブックマークにタグを付けると、ここに表示されます。</p>
-  </div>
-</div>
-
-<div class="modal-overlay" id="auto-tag-overlay" hidden>
-  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="auto-tag-title">
-    <div class="modal-header">
-      <h2 id="auto-tag-title">自動タグ付け</h2>
-      <button type="button" class="modal-close-btn" id="auto-tag-close-btn" aria-label="閉じる">&times;</button>
-    </div>
-    <div id="auto-tag-body"></div>
   </div>
 </div>
 
@@ -1227,7 +1190,8 @@
       // 旧形式(グループ)のデータは、読み込み時にタグへ変換する(group → [group])。ディスクへは次の保存で反映される
       parsed.forEach(function (b) {
         b.tags = normalizeTags(b.tags, b.group);
-        b.groups = normalizeGroups(b.groups); // グループ(v3 から)。旧データには無いので、空になる
+        b.groupName = normalizeGroupName(b.groupName, b.groups); // グループ(1つ)。v3 の groups は先頭だけを使う。旧データには無いので、空になる
+        delete b.groups;
         delete b.group;
         delete b.groupOrder;
       });
@@ -1486,7 +1450,7 @@
       url: url,
       title: title,
       tags: normalizeTags(raw.tags, raw.group), // 旧形式(group)の要素は、group 名を1つのタグにする
-      groups: normalizeGroups(raw.groups),
+      groupName: normalizeGroupName(raw.groupName, raw.groups),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -1574,7 +1538,7 @@
       if (!used[k]) { delete tagColors[k]; if (!syncingFromStorage) saveTagColors(); }
     });
     var usedGroups = Object.create(null);
-    bookmarks.forEach(function (b) { b.groups.forEach(function (g) { usedGroups[tagKey(g)] = true; }); });
+    bookmarks.forEach(function (b) { if (b.groupName) usedGroups[tagKey(b.groupName)] = true; });
     var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
@@ -1586,23 +1550,27 @@
     return bookmarks.filter(function (b) { return b.tags.length === 0; }).length;
   }
 
-  /* ---------- グループ(ブックマークに複数所属できる。比較・表記の統一・追加は、タグと同じ規則) ---------- */
+  /* ---------- グループ(ブックマークが入るのは1つだけ。groupName、無ければ ''。比較はタグと同じく大文字小文字を区別しない) ---------- */
 
-  // groups が配列なら、文字列だけを整えて返す(空・比較で同じ重複は入れない)。配列でなければ空
-  function normalizeGroups(raw) {
-    var out = [];
-    if (Array.isArray(raw)) raw.forEach(function (g) { if (typeof g === 'string') addTagTo(out, g); });
-    return out;
+  // groupName が文字列なら、前後の空白を除いて使う。そうでなく、v3 以前の groups(配列)があれば、先頭の空でない文字列を使う。どちらも無ければ ''
+  function normalizeGroupName(rawName, rawGroups) {
+    if (typeof rawName === 'string') return rawName.trim();
+    if (Array.isArray(rawGroups)) {
+      for (var i = 0; i < rawGroups.length; i++) {
+        if (typeof rawGroups[i] === 'string' && rawGroups[i].trim()) return rawGroups[i].trim();
+      }
+    }
+    return '';
   }
 
-  // 比較で同じグループの表記を、配列の先頭に近い要素で最初に現れたものに揃える
+  // 比較で同じグループの表記を、配列の先頭に近い要素のものに揃える
   function unifyGroupNames(list) {
     var names = Object.create(null);
     list.forEach(function (b) {
-      b.groups.forEach(function (g) { if (!(tagKey(g) in names)) names[tagKey(g)] = g; });
+      if (b.groupName && !(tagKey(b.groupName) in names)) names[tagKey(b.groupName)] = b.groupName;
     });
     list.forEach(function (b) {
-      b.groups = b.groups.map(function (g) { return names[tagKey(g)]; });
+      if (b.groupName) b.groupName = names[tagKey(b.groupName)];
     });
   }
 
@@ -1610,11 +1578,10 @@
   function getGroups() {
     var map = Object.create(null);
     bookmarks.forEach(function (b) {
-      b.groups.forEach(function (g) {
-        var k = tagKey(g);
-        if (!map[k]) map[k] = { key: k, name: g, count: 0 };
-        map[k].count++;
-      });
+      if (!b.groupName) return;
+      var k = tagKey(b.groupName);
+      if (!map[k]) map[k] = { key: k, name: b.groupName, count: 0 };
+      map[k].count++;
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
       var ia = groupOrder.indexOf(a.key);
@@ -1627,7 +1594,7 @@
   }
 
   function countUngrouped() {
-    return bookmarks.filter(function (b) { return b.groups.length === 0; }).length;
+    return bookmarks.filter(function (b) { return b.groupName === ''; }).length;
   }
 
   // 入力したグループ名を、既存のグループがあればその表記に合わせる(同じグループが別の表記で並ばないように)
@@ -1639,7 +1606,7 @@
 
   // key のグループに所属するか。key が '' なら、どのグループにも所属しない(「グループなし」)
   function inGroup(b, key) {
-    return key === '' ? b.groups.length === 0 : b.groups.some(function (g) { return tagKey(g) === key; });
+    return key === '' ? b.groupName === '' : tagKey(b.groupName) === key;
   }
 
   // 入力したタグ名を、既存のタグがあればその表記に合わせる(同じタグが別の表記で並ばないように)
@@ -1647,37 +1614,6 @@
     var k = tagKey(name.trim());
     var existing = getTags().filter(function (t) { return t.key === k; })[0];
     return existing ? existing.name : name.trim();
-  }
-
-  // 自動タグ付けで文章と照らすための名前。絵文字・記号(異体字セレクタ・ZWJ を含む)を除き、空白を1つにする。
-  // 絵文字だけのタグは、除くと空になるので、そのままの名前を使う。
-  var EMOJI_RE = /(?:[\uD83C-\uD83E][\uDC00-\uDFFF]|\uDB40[\uDC00-\uDC7F]|[©®‼⁉™ℹ←-⯿〰〽㊗㊙⃣️‍])/g;
-  function matchKey(name) {
-    var k = tagKey(name).replace(EMOJI_RE, '').replace(/\s+/g, ' ').trim();
-    return k || tagKey(name);
-  }
-
-  // 自動タグ付け。タイトル+URL+メモに含まれる既存のタグ名(大文字小文字・絵文字を区別しない)を、すべて返す。memo は null でもよい。
-  // names は、照らすタグ名の一覧(省略時は既存のタグ名)。多数のブックマークで呼ぶときは、tagNamesWith() で1回だけ作って渡す。
-  function guessTags(title, url, memo, names) {
-    var text = (title + ' ' + url + ' ' + (memo || '')).toLowerCase();
-    return (names || tagNamesWith()).filter(function (n) { return mentions(text, matchKey(n)); });
-  }
-
-  // text に key が含まれるか。半角英数字3文字以下の短い名前(ai・git など)は、前後が英数字でないときだけ一致とする(mail や digital に付かないように)
-  function mentions(text, key) {
-    var i = text.indexOf(key);
-    if (!/^[a-z0-9]{1,3}$/.test(key)) return i !== -1;
-    while (i !== -1) {
-      if (!/[a-z0-9]/.test(text.charAt(i - 1)) && !/[a-z0-9]/.test(text.charAt(i + key.length))) return true;
-      i = text.indexOf(key, i + 1);
-    }
-    return false;
-  }
-
-  // 既存のタグ名に、まだ存在しない新しいタグの名前(承認された候補)を加えた一覧
-  function tagNamesWith(newNames) {
-    return getTags().map(function (t) { return t.name; }).concat(newNames || []);
   }
 
   /* ---------- フィルタ・ソート(タグの絞り込み + 検索) ---------- */
@@ -1700,7 +1636,7 @@
       if (state.filterUntagged && b.tags.length !== 0) return false;
       if (state.filterTag !== null && !hasTag(b.tags, state.filterTag)) return false;
       if (state.filterGroup !== null && !inGroup(b, state.filterGroup)) return false;
-      var hay = (b.title + ' ' + (b.memo || '') + ' ' + b.tags.join(' ') + ' ' + b.groups.join(' ')).toLowerCase();
+      var hay = (b.title + ' ' + (b.memo || '') + ' ' + b.tags.join(' ') + ' ' + b.groupName).toLowerCase();
       return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
     });
   }
@@ -1726,7 +1662,8 @@
     renderList();
     renderDetail();
     addTagPicker.refresh();
-    addGroupPicker.refresh();
+    // グループの入力欄(追加・編集)の候補は、既存のグループの名前
+    document.getElementById('group-options').innerHTML = getGroups().map(function (g) { return '<option value="' + escapeHtml(g.name) + '">'; }).join('');
     if (!tagManageOverlay.hidden) renderTagManageModal(); // モーダルが開いている間は常に最新の件数を反映する
 
     syncHeaderHeight();
@@ -1745,10 +1682,9 @@
   /* ---------- タグ入力(追加フォーム・編集フォーム共通) ---------- */
 
   // chipsEl に選択中のタグ、suggestEl に既存のタグの候補を出す。タグは Enter・半角カンマ・全角カンマ・読点で確定する。
-  // onManual は、ユーザーが手でタグを追加・外したときに呼ばれる(追加フォームの自動タグ付けを止めるため)。
-  // 入力する「名前の種類」。タグとグループは、候補(既存の一覧)と、表記の合わせ方だけが違う。省略時はタグ
+  // onManual は、ユーザーが手でタグを追加・外したときに呼ばれる。
+  // 入力する「名前の種類」(候補の一覧と、表記の合わせ方)。省略時はタグ
   var TAG_SOURCE = { names: getTags, canonical: canonicalTag };
-  var GROUP_SOURCE = { names: getGroups, canonical: canonicalGroup };
 
   function createTagPicker(chipsEl, suggestEl, textEl, onManual, source) {
     var src = source || TAG_SOURCE;
@@ -2000,7 +1936,7 @@
     return getSearchTokens().length === 0;
   }
 
-  // グループごとの区画。区画の順はグループ管理で決めた順(getGroups)。各行は、所属するすべてのグループの区画に出す(重複して出る)。グループなしは最後。
+  // グループごとの区画。区画の順はグループ管理で決めた順(getGroups)。各行は、入っているグループ(groupName)の区画に1回だけ出す。グループなしは最後。
   // グループで絞り込み中は、そのグループの区画だけになる。
   function groupItems(items) {
     var sections = [];
@@ -2088,7 +2024,7 @@
     if (!groupPopover.hidden && !groupPopover.contains(e.target) && e.target !== groupFilterBtn) closeGroupPopover();
   });
 
-  // 編集を始める。行は複数の区画に出て、編集フォームは最初に出る1か所なので、押した場所から離れることがある。フォームを見える位置へ動かす
+  // 編集を始める。編集フォームは全幅で出て、押した場所から離れることがあるので、フォームを見える位置へ動かす
   function startEdit(id) {
     state.editingId = id;
     state.editDraft = null;
@@ -2123,14 +2059,8 @@
       items.length + ' 件表示中(全 ' + bookmarks.length + ' 件)' +
       (reorderable && items.length ? ' — 同じ区画の中でドラッグして並べ替え' : '');
 
-    // 行は複数の区画に出るので、編集フォームは、区画の並びで最初に出る1か所だけにする(フォームの id が重複しないように)
-    var editRendered = false;
     function rowHtml(b) {
-      if (b.id === state.editingId && !editRendered) {
-        editRendered = true;
-        return renderEditCard(b);
-      }
-      return renderCard(b, reorderable);
+      return b.id === state.editingId ? renderEditCard(b) : renderCard(b, reorderable);
     }
 
     container.innerHTML = items.length
@@ -2212,7 +2142,6 @@
   });
 
   function openTagManageModal() {
-    if (!autoTagOverlay.hidden) return; // 自動タグ付けモーダルと同時には開かない
     state.manageTab = 'tag';
     tagManageOverlay.hidden = false;
     renderTagManageModal();
@@ -2331,7 +2260,7 @@
     var newName = state.renameDraft;
     var newKey = tagKey(newName);
     var merged = (isGroup ? getGroups() : getTags()).filter(function (x) { return x.key === newKey && x.key !== t.key; })[0];
-    var affected = bookmarks.filter(function (b) { return hasTag(isGroup ? b.groups : b.tags, t.name); });
+    var affected = bookmarks.filter(function (b) { return isGroup ? tagKey(b.groupName) === t.key : hasTag(b.tags, t.name); });
     var items = affected.slice(0, 5).map(function (b) { return '<li>' + escapeHtml(b.title) + '</li>'; }).join('') +
       (affected.length > 5 ? '<li>ほか ' + (affected.length - 5) + ' 件</li>' : '');
     var key = escapeHtml(t.key);
@@ -2509,16 +2438,11 @@
     var merged = getGroups().filter(function (g) { return g.key === newKey && g.key !== oldKey; })[0];
     var finalName = merged ? merged.name : newName;
     bookmarks.forEach(function (b) {
-      var out = [];
-      b.groups.forEach(function (g) { addTagTo(out, tagKey(g) === oldKey ? finalName : g); });
-      b.groups = out;
+      if (tagKey(b.groupName) === oldKey) b.groupName = finalName;
     });
     if (state.filterGroup === oldKey) state.filterGroup = newKey; // 絞り込みは新しい名前へ引き継ぐ
     groupOrder = sanitizeTagOrder(groupOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
     saveGroupOrder();
-    var formGroups = [];
-    addGroupPicker.tags.forEach(function (g) { addTagTo(formGroups, tagKey(g) === oldKey ? finalName : g); });
-    addGroupPicker.tags = formGroups;
     saveData(bookmarks);
     render();
   }
@@ -2527,9 +2451,8 @@
   function deleteGroup(key) {
     state.confirmDeleteTag = null;
     bookmarks.forEach(function (b) {
-      b.groups = b.groups.filter(function (g) { return tagKey(g) !== key; });
+      if (tagKey(b.groupName) === key) b.groupName = '';
     });
-    addGroupPicker.tags = addGroupPicker.tags.filter(function (g) { return tagKey(g) !== key; });
     saveData(bookmarks);
     render(); // 絞り込み中のグループが消えていれば、render() が絞り込みを外す
   }
@@ -2800,7 +2723,7 @@
       '<dl>' +
         '<div><dt>URL</dt><dd class="mono">' + escapeHtml(b.url) + '</dd></div>' +
         (b.memo ? '<div><dt>メモ</dt><dd>' + highlightText(b.memo, tokens) + '</dd></div>' : '') +
-        (b.groups.length ? '<div><dt>グループ</dt><dd>' + b.groups.map(escapeHtml).join(' / ') + '</dd></div>' : '') +
+        (b.groupName ? '<div><dt>グループ</dt><dd>' + escapeHtml(b.groupName) + '</dd></div>' : '') +
         (b.tags.length ? '<div><dt>タグ</dt><dd>' + b.tags.map(function (t) { return highlightText(t, tokens); }).join(' / ') + '</dd></div>' : '') +
         (b.loginId ? '<div><dt>ログインID</dt><dd class="mono">' + escapeHtml(b.loginId) + copyBtn('copy-login-id') + '</dd></div>' : '') +
         (b.loginPassword ? '<div><dt>パスワード</dt><dd class="mono">●●●●●●●●' + copyBtn('copy-login-password') + '</dd></div>' : '') +
@@ -2818,7 +2741,7 @@
   function renderEditCard(b) {
     // 入力中の内容(再描画の前の状態)があれば、保存済みの値より優先する
     var d = state.editDraft && state.editDraft.id === b.id ? state.editDraft : {
-      url: b.url, title: b.title, loginId: b.loginId || '', loginPassword: b.loginPassword || '', memo: b.memo || ''
+      url: b.url, title: b.title, groupName: b.groupName, loginId: b.loginId || '', loginPassword: b.loginPassword || '', memo: b.memo || ''
     };
     return (
       '<article class="card" data-card-id="' + escapeHtml(b.id) + '">' +
@@ -2828,7 +2751,7 @@
             '<div class="field"><label for="edit-url">URL</label><input id="edit-url" type="text" name="url" value="' + escapeHtml(d.url) + '" required></div>' +
             '<div class="field"><label for="edit-title">タイトル</label><input id="edit-title" type="text" name="title" value="' + escapeHtml(d.title) + '" required></div>' +
             '<div class="field"><label for="edit-tag-text">タグ(Enter かカンマで確定)</label><div class="chip-list" id="edit-tag-chips"></div><input id="edit-tag-text" type="text" placeholder="タグを入力" autocomplete="off"><div class="chip-list" id="edit-tag-suggest"></div></div>' +
-            '<div class="field"><label for="edit-group-text">グループ(Enter かカンマで確定)</label><div class="chip-list" id="edit-group-chips"></div><input id="edit-group-text" type="text" placeholder="グループを入力" autocomplete="off"><div class="chip-list" id="edit-group-suggest"></div></div>' +
+            '<div class="field"><label for="edit-group-text">グループ</label><input id="edit-group-text" type="text" name="group" list="group-options" autocomplete="off" placeholder="グループを入力" value="' + escapeHtml(d.groupName) + '"></div>' +
             '<div class="field"><label for="edit-login-id">ログインID</label><input id="edit-login-id" type="text" name="loginId" value="' + escapeHtml(d.loginId) + '"></div>' +
             '<div class="field">' +
               '<label for="edit-login-password">パスワード</label>' +
@@ -2856,7 +2779,7 @@
     function saveDraft() {
       state.editDraft = {
         id: b.id, url: form.url.value, title: form.title.value, loginId: form.loginId.value,
-        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice(), groups: groupPicker.tags.slice()
+        loginPassword: form.loginPassword.value, memo: form.memo.value, tags: picker.tags.slice(), groupName: form.group.value
       };
     }
     var picker = createTagPicker(
@@ -2865,16 +2788,8 @@
       document.getElementById('edit-tag-text'),
       saveDraft
     );
-    var groupPicker = createTagPicker(
-      document.getElementById('edit-group-chips'),
-      document.getElementById('edit-group-suggest'),
-      document.getElementById('edit-group-text'),
-      saveDraft,
-      GROUP_SOURCE
-    );
     var hasDraft = state.editDraft && state.editDraft.id === b.id;
     picker.set(hasDraft ? state.editDraft.tags : b.tags);
-    groupPicker.set(hasDraft ? state.editDraft.groups : b.groups);
     form.addEventListener('input', saveDraft);
 
     cancelBtn.addEventListener('click', function () {
@@ -2891,13 +2806,12 @@
         return;
       }
       picker.commit(); // 入力欄に残っている未確定のタグも含める
-      groupPicker.commit(); // グループも同じ
       b.url = url;
       b.scheme = scheme;
       b.domain = deriveDomain(url, scheme);
       b.title = form.title.value.trim() || deriveTentativeTitle(url, scheme);
       b.tags = picker.tags.slice();
-      b.groups = groupPicker.tags.slice();
+      b.groupName = canonicalGroup(form.group.value);
       b.loginId = form.loginId.value.trim() || null;
       b.loginPassword = form.loginPassword.value || null;
       b.memo = form.memo.value.trim() ? form.memo.value : null;
@@ -2931,29 +2845,12 @@
   var addForm = document.getElementById('add-form');
   var newUrlInput = document.getElementById('new-url');
   var newTitleInput = document.getElementById('new-title');
-  var newMemoInput = document.getElementById('new-memo');
-  // タグを手で追加・外したら true。以後は自動の事前選択で上書きしない。
-  var addFormTagsManual = false;
   var addTagPicker = createTagPicker(
     document.getElementById('new-tag-chips'),
     document.getElementById('new-tag-suggest'),
     document.getElementById('new-tag-text'),
-    function () { addFormTagsManual = true; }
+    function () {}
   );
-  // グループは、自動では選ばない(タグの事前選択の対象外)
-  var addGroupPicker = createTagPicker(
-    document.getElementById('new-group-chips'),
-    document.getElementById('new-group-suggest'),
-    document.getElementById('new-group-text'),
-    function () {},
-    GROUP_SOURCE
-  );
-
-  // URL・タイトル・メモの入力に合わせて、含まれる既存のタグ名をすべて事前選択して見せる
-  function previewAddFormTags() {
-    if (addFormTagsManual) return;
-    addTagPicker.set(guessTags(newTitleInput.value, newUrlInput.value.trim(), newMemoInput.value));
-  }
 
   document.getElementById('toggle-add-btn').addEventListener('click', function () {
     addPanel.hidden = !addPanel.hidden;
@@ -2974,10 +2871,6 @@
     e.preventDefault();
     newUrlInput.value = parsed.url;
     newTitleInput.value = parsed.title;
-    previewAddFormTags();
-  });
-  [newUrlInput, newTitleInput, newMemoInput].forEach(function (el) {
-    el.addEventListener('input', previewAddFormTags);
   });
 
   addForm.addEventListener('submit', function (e) {
@@ -2990,7 +2883,6 @@
     }
 
     addTagPicker.commit(); // 入力欄に残っている未確定のタグも含める
-    addGroupPicker.commit(); // グループも同じ
     var title = newTitleInput.value.trim() || deriveTentativeTitle(url, scheme);
     var domain = deriveDomain(url, scheme);
     var loginId = document.getElementById('new-login-id').value.trim() || null;
@@ -3002,7 +2894,7 @@
       url: url,
       title: title,
       tags: addTagPicker.tags.slice(),
-      groups: addGroupPicker.tags.slice(),
+      groupName: canonicalGroup(document.getElementById('new-group-text').value),
       loginId: loginId,
       loginPassword: loginPassword,
       memo: memo,
@@ -3015,206 +2907,8 @@
     addForm.reset();
     addTagPicker.set([]);
     addTagPicker.showAll = false;
-    addGroupPicker.set([]);
-    addGroupPicker.showAll = false;
-    addFormTagsManual = false;
     addPanel.hidden = true;
     render();
-  });
-
-  /* ---------- 自動タグ付け(全件。新しいタグの候補 → 変更案 → 承認した行だけ適用) ---------- */
-
-  var AUTO_TAG_CANDIDATE_MAX = 10;
-  var DOMAIN_SECOND_LEVEL = ['co', 'or', 'ne', 'ac', 'go', 'ed', 'gr', 'com', 'org', 'net'];
-  var autoTagOverlay = document.getElementById('auto-tag-overlay');
-  var autoTagBody = document.getElementById('auto-tag-body');
-  var autoTagBtn = document.getElementById('auto-tag-btn');
-  var autoTag = null; // { step: 1|2, candidates: [{name, ids, on}], plan: [{bookmark, proposed, added, removed, checked}] }
-
-  // ドメインの主要部(github.com → github、portal.example.co.jp → example)。IP アドレスや1語のホスト名は null
-  function domainLabel(domain) {
-    if (!domain || /^[\d.]+$/.test(domain) || domain.indexOf(':') !== -1) return null;
-    var parts = domain.replace(/^www\./, '').split('.');
-    if (parts.length < 2) return null;
-    var i = parts.length - 2;
-    if (i > 0 && parts[parts.length - 1].length === 2 && DOMAIN_SECOND_LEVEL.indexOf(parts[i]) !== -1) i--;
-    return parts[i];
-  }
-
-  // 文字種ごとの連続を語とする: 英数字(英字で始まる)、カタカナ(長音を含む)、漢字。ひらがなは語にしない。
-  // Intl.Segmenter は「ポータル」を「ポー」「タル」に割るため使わない。
-  function splitWords(text) {
-    return text.match(/[A-Za-z][A-Za-z0-9]+|[ァ-ヺー]{2,}|[一-鿿々]{2,}/g) || [];
-  }
-
-  // 新しいタグの候補にする語: ドメインの主要部と、タイトル・メモの語(2文字以上、数字だけは除く)。重複は除く
-  function bookmarkTerms(b) {
-    var seen = Object.create(null);
-    var out = [];
-    function add(w) {
-      var key = w.toLowerCase();
-      if (key.length < 2 || /^\d+$/.test(key) || seen[key]) return;
-      seen[key] = true;
-      out.push({ key: key, name: w });
-    }
-    var label = domainLabel(b.domain);
-    if (label) add(label);
-    splitWords(b.title + ' ' + (b.memo || '')).forEach(add);
-    return out;
-  }
-
-  // 既存のタグ名にない語のうち、2件以上のブックマークに共通し、全件の半分以下に出るものを、多い順に最大 AUTO_TAG_CANDIDATE_MAX 件
-  function suggestNewTags() {
-    var existing = Object.create(null);
-    getTags().forEach(function (t) { existing[t.key] = true; });
-    var map = Object.create(null);
-    bookmarks.forEach(function (b) {
-      bookmarkTerms(b).forEach(function (t) {
-        if (existing[t.key]) return;
-        if (!map[t.key]) map[t.key] = { name: t.name, ids: [], on: false };
-        map[t.key].ids.push(b.id);
-      });
-    });
-    return Object.keys(map).map(function (k) { return map[k]; })
-      .filter(function (c) { return c.ids.length >= 2 && c.ids.length * 2 <= bookmarks.length; })
-      .sort(function (a, b) { return b.ids.length - a.ids.length || a.name.localeCompare(b.name); })
-      .slice(0, AUTO_TAG_CANDIDATE_MAX);
-  }
-
-  // 全ブックマークのうち、提案のタグ(既存のタグ名+承認した新タグ)が、いまのタグと違うものの変更案。提案が空のものは対象外
-  function buildAutoTagPlan(newNames) {
-    var plan = [];
-    var names = tagNamesWith(newNames);
-    bookmarks.forEach(function (b) {
-      var proposed = guessTags(b.title, b.url, b.memo, names);
-      if (!proposed.length) return;
-      var added = proposed.filter(function (t) { return !hasTag(b.tags, t); });
-      var removed = b.tags.filter(function (t) { return !hasTag(proposed, t); });
-      if (added.length || removed.length) plan.push({ bookmark: b, proposed: proposed, added: added, removed: removed, checked: false });
-    });
-    return plan;
-  }
-
-  function autoTagCheckedCount() {
-    return autoTag.plan.filter(function (p) { return p.checked; }).length;
-  }
-
-  function renderAutoTag() {
-    var title = document.getElementById('auto-tag-title');
-    var html;
-    if (autoTag.step === 1) {
-      title.textContent = '自動タグ付け(1/2) 新しいタグの候補';
-      html = autoTag.candidates.length
-        ? '<p class="auto-tag-hint">複数のブックマークに共通する語です。作るものを選ぶと、次の変更案で、そのタグも提案します。</p>' +
-          '<div class="auto-tag-list">' + autoTag.candidates.map(function (c, i) {
-            var titles = c.ids.slice(0, 3).map(function (id) {
-              return escapeHtml(bookmarks.filter(function (b) { return b.id === id; })[0].title);
-            }).join('、');
-            return '<label class="auto-tag-row"><input type="checkbox" data-cand="' + i + '"' + (c.on ? ' checked' : '') + '>' +
-              '<span class="auto-tag-main"><span class="auto-tag-name">' + escapeHtml(c.name) + '</span>' +
-              '<span class="auto-tag-meta">' + c.ids.length + ' 件: ' + titles + (c.ids.length > 3 ? ' ほか' : '') + '</span></span></label>';
-          }).join('') + '</div>'
-        : '<p class="auto-tag-empty">新しいタグの候補はありません。</p>';
-      html += '<div class="auto-tag-actions">' +
-        '<button type="button" class="btn-quiet" data-action="auto-cancel">キャンセル</button>' +
-        '<button type="button" class="btn btn-amber" data-action="auto-next">次へ</button></div>';
-    } else {
-      title.textContent = '自動タグ付け(2/2) 変更案';
-      html = autoTag.plan.length
-        ? '<p class="auto-tag-hint">チェックした行だけを変更します。提案のタグで、いまのタグを置き換えます。</p>' +
-          '<div class="auto-tag-toolbar"><button type="button" class="btn-quiet" data-action="auto-all">全選択</button>' +
-          '<button type="button" class="btn-quiet" data-action="auto-none">全解除</button></div>' +
-          '<div class="auto-tag-list">' + autoTag.plan.map(function (p, i) {
-            return '<label class="auto-tag-row"><input type="checkbox" data-plan="' + i + '"' + (p.checked ? ' checked' : '') + '>' +
-              '<span class="auto-tag-main"><span class="auto-tag-name">' + escapeHtml(p.bookmark.title) + '</span>' +
-              '<span class="auto-tag-meta">' + (p.bookmark.tags.length ? escapeHtml(p.bookmark.tags.join('、')) : 'タグなし') + ' → ' + escapeHtml(p.proposed.join('、')) +
-              (p.removed.length ? ' <span class="auto-tag-removed">外れる: ' + escapeHtml(p.removed.join('、')) + '</span>' : '') + '</span></span></label>';
-          }).join('') + '</div>'
-        : '<p class="auto-tag-empty">変更案はありません。</p>';
-      html += '<div class="auto-tag-actions">' +
-        '<button type="button" class="btn-quiet" data-action="auto-back">戻る</button>' +
-        '<button type="button" class="btn-quiet" data-action="auto-cancel">キャンセル</button>' +
-        (autoTag.plan.length ? '<button type="button" class="btn btn-amber" data-action="auto-apply" id="auto-apply-btn"></button>' : '') + '</div>';
-    }
-    autoTagBody.innerHTML = html;
-    updateAutoTagApply();
-  }
-
-  // 再描画でボタンが作り直されるため、押したボタン(無くなっていれば先頭のコントロール)へフォーカスを戻す
-  function renderAutoTagAndFocus(action) {
-    renderAutoTag();
-    var again = autoTagBody.querySelector('[data-action="' + action + '"]') || autoTagBody.querySelector('input, button');
-    if (again) again.focus();
-  }
-
-  function updateAutoTagApply() {
-    var btn = document.getElementById('auto-apply-btn');
-    if (!btn) return;
-    var n = autoTagCheckedCount();
-    btn.textContent = n + ' 件を適用';
-    btn.disabled = n === 0;
-  }
-
-  function closeAutoTag() {
-    autoTagOverlay.hidden = true;
-    autoTag = null;
-    autoTagBtn.focus(); // 開いた場所へフォーカスを戻す
-  }
-
-  autoTagBtn.addEventListener('click', function () {
-    if (!tagManageOverlay.hidden) return; // タグ管理モーダルと同時には開かない
-    autoTag = { step: 1, candidates: suggestNewTags(), plan: [] };
-    autoTagOverlay.hidden = false;
-    renderAutoTag();
-    (autoTagBody.querySelector('input, button') || document.getElementById('auto-tag-close-btn')).focus();
-  });
-  document.getElementById('auto-tag-close-btn').addEventListener('click', closeAutoTag);
-  autoTagOverlay.addEventListener('click', function (e) {
-    if (e.target === autoTagOverlay) closeAutoTag(); // 背景クリックで閉じる
-  });
-
-  autoTagBody.addEventListener('change', function (e) {
-    var cand = e.target.getAttribute('data-cand');
-    var plan = e.target.getAttribute('data-plan');
-    if (cand !== null) autoTag.candidates[+cand].on = e.target.checked;
-    if (plan !== null) {
-      autoTag.plan[+plan].checked = e.target.checked;
-      updateAutoTagApply();
-    }
-  });
-
-  autoTagBody.addEventListener('click', function (e) {
-    var btn = e.target.closest('[data-action]');
-    if (!btn) return;
-    var action = btn.getAttribute('data-action');
-    if (action === 'auto-cancel') {
-      closeAutoTag();
-      return;
-    }
-    if (action === 'auto-next') {
-      var names = autoTag.candidates.filter(function (c) { return c.on; }).map(function (c) { return c.name; });
-      autoTag.plan = buildAutoTagPlan(names);
-      autoTag.step = 2;
-      renderAutoTagAndFocus(action);
-    } else if (action === 'auto-back') {
-      autoTag.step = 1;
-      renderAutoTagAndFocus(action);
-    } else if (action === 'auto-all' || action === 'auto-none') {
-      autoTag.plan.forEach(function (p) { p.checked = action === 'auto-all'; });
-      renderAutoTagAndFocus(action);
-    } else if (action === 'auto-apply') {
-      var targets = autoTag.plan.filter(function (p) { return p.checked; });
-      if (!targets.length) return;
-      targets.forEach(function (p) {
-        var out = [];
-        p.proposed.forEach(function (t) { addTagTo(out, t); });
-        p.bookmark.tags = out;
-      });
-      unifyTagNames(bookmarks);
-      saveData(bookmarks);
-      closeAutoTag();
-      render();
-    }
   });
 
   /* ---------- 検索・ソート ---------- */
@@ -3333,7 +3027,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 3, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -3417,7 +3111,7 @@
     toggleHelp();
   });
 
-  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → グループのパネル → 自動タグ付け → タグ管理モーダル → 各種フォーム(編集・追加)。
+  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → グループのパネル → タグ管理モーダル → 各種フォーム(編集・追加)。
   // フォームは2種をまとめて1段階として扱う(同時に開いていても1回のEscapeで閉じ切る)。閉じる層が何も無ければ、最後にフォーカスを外す。
   function closeTopmostLayer() {
     if (!helpPanel.hidden) {
@@ -3428,11 +3122,6 @@
     if (!groupPopover.hidden) {
       closeGroupPopover();
       groupFilterBtn.focus();
-      return;
-    }
-
-    if (!autoTagOverlay.hidden) {
-      closeAutoTag();
       return;
     }
 
@@ -3473,12 +3162,12 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return; // ブラウザ標準のショートカットを妨げない
 
     if (e.key === 'Escape') {
-      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
+      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
         clearSearch();
         return;
       }
       // 検索欄が空で、タグで絞り込み中のときは、絞り込みを外す(キーボードだけで解除できるように)
-      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged || state.filterGroup !== null) && tagManageOverlay.hidden && autoTagOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
+      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged || state.filterGroup !== null) && tagManageOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
         clearFilter();
         return;
       }
@@ -3486,7 +3175,7 @@
       return;
     }
 
-    if (!tagManageOverlay.hidden || !autoTagOverlay.hidden) return; // モーダル表示中はEscape以外のグローバルショートカットを無効化する
+    if (!tagManageOverlay.hidden) return; // モーダル表示中はEscape以外のグローバルショートカットを無効化する
 
     if (isTextInputElement(e.target)) return;
 
