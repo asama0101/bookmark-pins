@@ -651,7 +651,7 @@
     position: relative;
   }
 
-  /* アイコンのタイル(ファビコン・地球儀・ファイルのアイコン)。色は、区画のタグの色をくすませたもの */
+  /* アイコンのタイル(ファビコン・地球儀・ファイルのアイコン)。色は、区画のグループの色をくすませたもの */
   .seal {
     width: 44px;
     height: 44px;
@@ -806,7 +806,7 @@
   .filter-status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
   .filter-status[hidden] { display: none; }
 
-  /* 区画: 枠なし。見出しの下に、カードのグリッド(--h は、タグのキーから決めた色相) */
+  /* 区画: 枠なし。見出しの下に、カードのグリッド(--h は、グループの色相 groupHue) */
   .tag-group {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
@@ -938,6 +938,7 @@
     .side-col { position: static; max-height: none; }
     .add-grid { grid-template-columns: 1fr 1fr; }
     .add-grid > .field:nth-child(1) { grid-column: 1 / -1; }
+    .filter-popover { right: 12px; max-height: min(520px, calc(100vh - var(--header-h) - 12px)); }
   }
 </style>
 </head>
@@ -1106,7 +1107,7 @@
     renameDraft: null,      // 改名の入力中(確認の段階を含む)の新しい名前
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
-    colorEditing: null,     // タグ管理モーダルで色を選んでいるタグのキー
+    colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
     manageTab: 'tag'        // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'tag' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
@@ -1913,6 +1914,9 @@
     closeFilterPanels();
     filterPanels[kind].popover.hidden = false;
     filterPanels[kind].btn.setAttribute('aria-expanded', 'true');
+    // パネルは DOM の末尾にあり Tab では届かないので、選択中の行(無ければ「すべて」)へフォーカスを移す
+    var first = filterPanels[kind].popover.querySelector('.filter-row[aria-pressed="true"]') || filterPanels[kind].popover.querySelector('[data-filter-all]');
+    if (first) first.focus();
   }
 
   function closeFilterPanels() {
@@ -2402,7 +2406,7 @@
   //   getDragged/setDragged: ドラッグ中の識別子を保持するアクセサ(呼び出し元のモジュール変数を橋渡しする)
   //   dropEffect: dragover時にdataTransfer.dropEffectへ設定する値(省略可)
   //   onDrop(draggedKey, key, after): ドロップ確定時に呼ばれる並べ替え処理
-  //   horizontal: true なら、前後を要素の左右の半分で判定する(省略時は上下。折り返して並ぶタイル用)
+  //   horizontal: true なら、前後を要素の左右の半分で判定する(省略時は上下。チップ・グリッドのカードなど、横に並ぶ要素用)
   function bindDragReorder(el, key, opts) {
     el.addEventListener('dragstart', function (e) {
       opts.setDragged(key);

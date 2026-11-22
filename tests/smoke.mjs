@@ -262,7 +262,7 @@ const det = await page.$eval('#detail', (e) => e.textContent);
 check('詳細にパスワードの値は出ない', !det.includes('secret-pw') && det.includes('●●●●●●●●'), det);
 check('詳細に回数と注記が出る', det.includes('直近28日に開いた回数') && det.includes('パスワードは平文で保存されます'), det);
 
-// 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行は隠れる
+// 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行(#tag-section・#tag-bar)は無い
 await open(page, []);
 check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));
 check('タグ行(#tag-section・#tag-bar)は無い', (await page.$('#tag-section')) === null && (await page.$('#tag-bar')) === null);
@@ -583,6 +583,31 @@ await page.focus('#search-input');
 await page.keyboard.press('Escape');
 check('パネルが開いているとき、空の検索欄の Escape は絞り込みを外さず、パネルだけ閉じる', (await hiddenOf(page, '#tag-popover')) && (await tagBtn(page)).text === 'タグ: b' && JSON.stringify(await titles(page)) === JSON.stringify(['T0']), await tagBtn(page));
 check('ヘルプの Esc の説明が「グループ・タグのパネル」', (await page.$eval('#help-panel', (e) => e.textContent)).includes('グループ・タグのパネル'));
+
+// パネルを開くと、フォーカスがパネルの中へ入る(選択中の行、無ければ「すべて」)
+const activeRow = (p) => p.evaluate(() => { var a = document.activeElement; return a ? (a.hasAttribute('data-filter-all') ? 'all' : a.getAttribute('data-filter-key')) : null; });
+await page.click('#filter-clear-btn');
+for (const [kind, btn, pop, key] of [['タグ', '#tag-filter-btn', '#tag-popover', 'b'], ['グループ', '#group-filter-btn', '#group-popover', 'g1']]) {
+  await page.click(btn);
+  check(kind + 'のパネル(絞り込みなし): フォーカスは「すべて」の行', (await activeRow(page)) === 'all', await activeRow(page));
+  await page.click(pop + ' [data-filter-key="' + key + '"]');
+  await page.click(btn);
+  check(kind + 'のパネル(絞り込み中): フォーカスは選択中の行', (await activeRow(page)) === key, await activeRow(page));
+  await page.keyboard.press('Escape');
+  check(kind + 'のパネル: フォーカス中の行から Escape で閉じ、ボタンへ戻る', (await hiddenOf(page, pop)) && (await page.evaluate(() => document.activeElement.id)) === btn.slice(1), await page.evaluate(() => document.activeElement.id));
+  await page.click('#filter-clear-btn');
+}
+
+// 狭い幅(400x740)でも、パネルは画面からはみ出さない
+const vpPrev = page.viewportSize();
+await page.setViewportSize({ width: 400, height: 740 });
+for (const [btn, pop] of [['#tag-filter-btn', '#tag-popover'], ['#group-filter-btn', '#group-popover']]) {
+  await page.click(btn);
+  const r = await page.$eval(pop, (e) => { var b = e.getBoundingClientRect(); return { left: b.left, right: b.right, bottom: b.bottom, vw: window.innerWidth, vh: window.innerHeight }; });
+  check('400px 幅で ' + pop + ' が画面内に収まる', r.left >= 0 && r.right <= r.vw && r.bottom <= r.vh, r);
+  await page.keyboard.press('Escape');
+}
+await page.setViewportSize(vpPrev || { width: 1280, height: 720 });
 
 // 検索ボックスの # 候補で選んでも、ボタンの文字が替わる
 await open(page, [bm(0, { tags: ['alpha'] }), bm(1)]);
