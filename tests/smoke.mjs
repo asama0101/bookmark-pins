@@ -682,6 +682,16 @@ await page.click(colorBtn('g'));
 await page.keyboard.press('Escape');
 check('Escape で色の選択だけが閉じる(モーダルは開いたまま)', (await page.$$('#tag-manage-list .tag-color-picker')).length === 0 && !(await page.$eval('#tag-manage-overlay', (e) => e.hidden)) && (await dragOf('g')) === 'true');
 
+// 管理モーダルのタブを替えると、開いていた色の選択は閉じる(タグとグループのキーが同じでも、選択の状態が混ざらない)
+await openColors(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
+await openGroupManage(page);
+await page.click(colorBtn('same'));
+await page.click('[data-manage-tab="tag"]');
+check('グループの色の選択を開いたままタグのタブへ替えると、色の選択は閉じている', (await page.$$('#tag-manage-list .tag-color-picker')).length === 0);
+await page.click(colorBtn('same'));
+await page.click('[data-manage-tab="group"]');
+check('タグの色の選択を開いたままグループのタブへ替えると、色の選択は閉じている', (await page.$$('#tag-manage-list .tag-color-picker')).length === 0);
+
 // (b) 同名のタグとグループの色は、互いに影響しない
 await openColors(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
 await page.click('#tag-filter-btn');
