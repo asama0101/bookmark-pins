@@ -387,6 +387,7 @@ check('グループが無いブックマークの詳細には、グループの�
 // ===== グループ(管理: 改名・統合・削除・並べ替え) =====
 const mdata = [bm(0, { groups: ['a'], tags: ['x'] }), bm(1, { groups: ['b'] }), bm(2, { groups: ['a', 'c'] })];
 await open(page, mdata);
+check('管理ボタンの名前', (await page.$eval('#tag-manage-open-btn', (e) => e.textContent.trim())) === '管理');
 await page.click('#tag-manage-open-btn');
 await page.click('[data-manage-tab="group"]');
 const rowNames = () => page.$$eval('#tag-manage-list .tag-manage-name', (els) => els.map((e) => e.textContent));
