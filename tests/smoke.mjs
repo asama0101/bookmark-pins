@@ -527,6 +527,19 @@ await page.focus('#search-input');
 await page.keyboard.press('Escape');
 check('パネルが開いているとき、検索欄の Escape はパネルを閉じ、検索は残る', (await page.$eval('#group-popover', (e) => e.hidden)) && (await page.$eval('#search-input', (e) => e.value)) === 'T0');
 
+// ===== タグの手動の並びは持たない(名前順) =====
+const tagTiles = (p) => p.$$eval('.tag-tile[data-tag]', (els) => els.map((e) => e.getAttribute('data-tag')));
+await open(page, [bm(0, { tags: ['a', 'b'] })]);
+await page.evaluate(() => localStorage.setItem('bookmarks_tag_order', JSON.stringify(['b', 'a'])));
+await page.reload();
+check('旧キー bookmarks_tag_order は起動時に消え、タグは名前順', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_order'))) === null && JSON.stringify(await tagTiles(page)) === JSON.stringify(['a', 'b']), await tagTiles(page));
+await importJson(page, { version: 4, bookmarks: [bm(0, { tags: ['a', 'b'] })], tagOrder: ['b', 'a'] });
+check('tagOrder 入りのファイルをインポートしても、保存されず名前順', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_order'))) === null && JSON.stringify(await tagTiles(page)) === JSON.stringify(['a', 'b']), await tagTiles(page));
+const [dlTag] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
+const exportedTag = JSON.parse(await (await import('node:fs/promises')).readFile(await dlTag.path(), 'utf8'));
+check('エクスポートに tagOrder が無い', !('tagOrder' in exportedTag), Object.keys(exportedTag));
+check('タグのタイルは draggable でない', await page.$$eval('.tag-tile[data-tag]', (els) => els.length > 0 && els.every((e) => !e.hasAttribute('draggable'))));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

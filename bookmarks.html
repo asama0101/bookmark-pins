@@ -1138,7 +1138,6 @@
   'use strict';
 
   var STORAGE_KEY = 'bookmarks_data';
-  var TAG_ORDER_KEY = 'bookmarks_tag_order';
   var SUGGEST_MAX = 10; // タグ入力で、入力が空のときに出す既存タグの候補の数
   var RECENT_MS = 28 * 24 * 60 * 60 * 1000; // 「よく開く」の集計期間(28日)
   var TOP_SITES_MAX = 10;
@@ -1219,7 +1218,7 @@
 
   var bookmarks = loadData();
 
-  // タグのタイルの手動の並び(タグのキーの配列)。空なら名前順。ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める
+  // 並びのキーの配列(グループの並び用)を整える: 文字列だけを小文字のキーにして、空と重複を除く
   function sanitizeTagOrder(raw) {
     var out = [];
     if (Array.isArray(raw)) {
@@ -1232,24 +1231,12 @@
     return out;
   }
 
-  function loadTagOrder() {
-    try {
-      return sanitizeTagOrder(JSON.parse(localStorage.getItem(TAG_ORDER_KEY)));
-    } catch (e) {
-      return [];
-    }
-  }
-
-  var tagOrder = loadTagOrder();
-
-  function saveTagOrder() {
-    localStorage.setItem(TAG_ORDER_KEY, JSON.stringify(tagOrder));
-  }
-
-  // グループの並び(グループのキー(小文字)の配列)。タグのタイルの並び(tagOrder)とは別で、グループ管理で決める。無ければ空。
-  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す
+  // グループの並び(グループのキー(小文字)の配列)。グループ管理で決める。無ければ空。
+  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す。
+  // 旧キー bookmarks_tag_order(タグの手動の並び)は廃止した(名前順)ので、これも消す
   var GROUPS_ORDER_KEY = 'bookmarks_groups_order';
   try { localStorage.removeItem('bookmarks_group_order'); } catch (e) { /* 消せなくても起動は続ける */ }
+  try { localStorage.removeItem('bookmarks_tag_order'); } catch (e) { /* 消せなくても起動は続ける */ }
   function loadGroupOrder() {
     try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUPS_ORDER_KEY))); } catch (e) { return []; }
   }
@@ -1501,7 +1488,7 @@
     });
   }
 
-  // 全ブックマークで数えたタグの一覧。手動の並び(tagOrder)にあるものを先に、残りは名前順。検索・絞り込みでは変わらない。
+  // 全ブックマークで数えたタグの一覧。名前順。検索・絞り込みでは変わらない。
   function getTags() {
     var map = Object.create(null);
     bookmarks.forEach(function (b) {
@@ -1512,11 +1499,6 @@
       });
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
-      var ia = tagOrder.indexOf(a.key);
-      var ib = tagOrder.indexOf(b.key);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
       return a.key.localeCompare(b.key, 'ja');
     });
   }
@@ -1525,15 +1507,10 @@
   // 保存すると、取り込み途中の古い並び・色が、別のタブが先に書いた新しい並びを上書きして消す(データ→並びの順に届くため)
   var syncingFromStorage = false;
 
-  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)をタイルの並び・色・グループの並びから外す。変わったときだけ保存する
+  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)を色・グループの並びから外す。変わったときだけ保存する
   function pruneTagOrder() {
     var used = Object.create(null);
     bookmarks.forEach(function (b) { b.tags.forEach(function (t) { used[tagKey(t)] = true; }); });
-    var kept = tagOrder.filter(function (k) { return used[k]; });
-    if (kept.length !== tagOrder.length) {
-      tagOrder = kept;
-      if (!syncingFromStorage) saveTagOrder();
-    }
     Object.keys(tagColors).forEach(function (k) {
       if (!used[k]) { delete tagColors[k]; if (!syncingFromStorage) saveTagColors(); }
     });
@@ -1888,17 +1865,6 @@
     var scrollLeft = bar.scrollLeft; // 作り直しても、横スクロールの位置を保つ
     bar.innerHTML = html;
     bar.scrollLeft = scrollLeft;
-    // タグのタイルは、ドラッグで並べ替えられる(「タグなし」は末尾に固定)
-    Array.prototype.forEach.call(bar.querySelectorAll('.tag-tile[data-tag]'), function (tile) {
-      tile.setAttribute('draggable', 'true');
-      bindDragReorder(tile, tile.getAttribute('data-tag'), {
-        getDragged: function () { return draggedTagKey; },
-        setDragged: function (v) { draggedTagKey = v; },
-        dropEffect: 'move',
-        horizontal: true,
-        onDrop: moveTag
-      });
-    });
   }
 
   // タグ行の上のホイール(縦)を横スクロールに変える。端に着いたら、ページの縦スクロールに任せる。
@@ -2399,8 +2365,6 @@
       b.tags = out;
     });
     if (state.filterTag === oldKey) state.filterTag = newKey; // 絞り込みは新しい名前へ引き継ぐ
-    tagOrder = sanitizeTagOrder(tagOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
-    saveTagOrder();
     if (newKey !== oldKey && tagColors[oldKey] !== undefined) { // 色も新しい名前へ引き継ぐ(統合のときは、既存のタグの色を優先する)
       if (tagColors[newKey] === undefined) tagColors[newKey] = tagColors[oldKey];
       delete tagColors[oldKey];
@@ -2507,19 +2471,7 @@
 
   var draggedCardId = null;
   var draggedGroup = null; // ドラッグ中の行がある区画のキー
-  var draggedTagKey = null;
   var draggedGroupKey = null; // グループ管理でドラッグ中のグループのキー
-
-  // targetKey のタグの直前(after=false)または直後(after=true)に draggedKey のタグを移動する。いまの表示順を、そのまま手動の並びにする。
-  function moveTag(draggedKey, targetKey, after) {
-    var keys = getTags().map(function (t) { return t.key; });
-    if (draggedKey === targetKey || keys.indexOf(draggedKey) === -1 || keys.indexOf(targetKey) === -1) return;
-    keys.splice(keys.indexOf(draggedKey), 1);
-    keys.splice(keys.indexOf(targetKey) + (after ? 1 : 0), 0, draggedKey);
-    tagOrder = keys;
-    saveTagOrder();
-    render();
-  }
 
   // targetKey のグループの直前(after=false)または直後(after=true)に draggedKey のグループを移動する。いまの区画の順を、そのまま保存する。
   function moveGroup(draggedKey, targetKey, after) {
@@ -3027,7 +2979,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -3057,13 +3009,12 @@
         alert('JSONの読み込みに失敗しました。ファイルの内容を確認してください。');
         return;
       }
-      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, tagOrder, groupOrder } のオブジェクト
+      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, groupOrder, tagColors } のオブジェクト
       var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.bookmarks) ? parsed.bookmarks : null);
       if (!list) {
         alert('インポートするJSONはブックマークの配列か、bookmarks を含むオブジェクトである必要があります。');
         return;
       }
-      var importedOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.tagOrder);
       // groupOrder は、version 3 以降だけ、グループのキーとして読む(旧版の groupOrder は、タグごとの区画の順だった)
       var importedGroupOrder = !Array.isArray(parsed) && parsed.version >= 3 ? sanitizeTagOrder(parsed.groupOrder) : [];
       var importedColors = sanitizeTagColors(Array.isArray(parsed) ? null : parsed.tagColors);
@@ -3079,11 +3030,9 @@
         return;
       }
       bookmarks = sanitized;
-      tagOrder = importedOrder;
       groupOrder = importedGroupOrder;
       tagColors = importedColors;
       saveData(bookmarks);
-      saveTagOrder();
       saveGroupOrder();
       saveTagColors();
       state.editingId = null;
@@ -3191,7 +3140,6 @@
   // 別のタブが保存したデータを取り込む。取り込まないと、古いタブの次の保存が、新しい変更を上書きして消す
   window.addEventListener('storage', function (e) {
     if (e.key === STORAGE_KEY) bookmarks = loadData();
-    else if (e.key === TAG_ORDER_KEY) tagOrder = loadTagOrder();
     else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
     else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
     else return;
