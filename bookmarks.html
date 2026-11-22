@@ -224,11 +224,12 @@
   }
   .btn-danger:hover { background: var(--wine); color: #fff; }
 
-  /* ---------- グループの絞り込みのパネル(ヘッダーの「グループ」ボタンの下) ---------- */
+  /* ---------- グループ・タグの絞り込みのパネル(ヘッダーの「グループ」「タグ」ボタンの下) ---------- */
 
-  #group-filter-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #group-filter-btn[aria-expanded="true"], #group-filter-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.12); }
-  .group-popover {
+  #group-filter-btn, #tag-filter-btn { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #group-filter-btn[aria-expanded="true"], #group-filter-btn.active,
+  #tag-filter-btn[aria-expanded="true"], #tag-filter-btn.active { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.12); }
+  .filter-popover {
     position: fixed;
     top: calc(var(--header-h) - 4px);
     right: 32px;
@@ -241,8 +242,8 @@
     border-radius: 22px;
     box-shadow: 0 2px 4px rgba(40, 60, 90, 0.08), 0 30px 60px -20px rgba(40, 60, 90, 0.45);
   }
-  .group-popover[hidden] { display: none; }
-  .group-row {
+  .filter-popover[hidden] { display: none; }
+  .filter-row {
     all: unset;
     box-sizing: border-box;
     display: flex;
@@ -256,12 +257,15 @@
     font-size: 0.95rem;
     line-height: 1.5;
   }
-  .group-row:hover { background: var(--hover); }
-  .group-row:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
-  .group-row[aria-pressed="true"] { background: var(--amber); color: #fff; }
-  .group-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* 長い名前も、省略せず全文で出す */
-  .group-row-count { flex: none; font-size: 0.8rem; color: var(--ink-soft); }
-  .group-row[aria-pressed="true"] .group-row-count { color: rgba(255, 255, 255, 0.8); }
+  .filter-row:hover { background: var(--hover); }
+  .filter-row:focus-visible { outline: 3px solid var(--amber); outline-offset: 1px; }
+  .filter-row[aria-pressed="true"] { background: var(--amber); color: #fff; }
+  /* 色の点(--h は tagHue()・groupHue() の色相。「タグなし」「グループなし」は既定の色相。彩度は落とす) */
+  .filter-row-dot { flex: none; width: 9px; height: 9px; margin-top: 0.5em; border-radius: 50%; background: hsl(var(--h, 220) 38% 52%); }
+  .filter-row[aria-pressed="true"] .filter-row-dot { background: #fff; }
+  .filter-row-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; } /* 長い名前も、省略せず全文で出す */
+  .filter-row-count { flex: none; font-size: 0.8rem; color: var(--ink-soft); }
+  .filter-row[aria-pressed="true"] .filter-row-count { color: rgba(255, 255, 255, 0.8); }
 
   /* ---------- 追加フォーム ---------- */
 
@@ -382,7 +386,7 @@
 
   /* ---------- レイアウト ---------- */
 
-  /* 左(よく開くサイト) / 中央(タグ行と一覧) / 右(詳細)の3列 */
+  /* 左(よく開くサイト) / 中央(件数表示の行と一覧) / 右(詳細)の3列 */
   .layout {
     display: grid;
     grid-template-columns: 220px minmax(0, 1fr) 320px;
@@ -397,7 +401,7 @@
 
   .main { min-width: 0; }
 
-  /* スクロールで動かした要素が、固定のヘッダー・タグ行・区画の見出しの下に隠れないようにする */
+  /* スクロールで動かした要素が、固定のヘッダー・件数表示の行・区画の見出しの下に隠れないようにする */
   html { scroll-padding-top: calc(var(--sticky-h) + 48px); }
 
   .side-col, .detail {
@@ -434,19 +438,6 @@
     margin: 0 0 16px;
   }
 
-  /* ---------- タグバー(タグ名+件数のタイル)と、一覧の区画 ---------- */
-
-  .tag-bar::-webkit-scrollbar { display: none; }
-  .tag-bar {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none; /* スクロールバーは出さない(ホイール・ドラッグ・タッチで動かせる) */
-    gap: 8px;
-    align-items: center;
-    padding: 4px 2px 12px; /* タイルの影が切れないように */
-  }
-
   /* ---------- よく開くサイト(直近の利用が多い順の縦リスト) ---------- */
 
   .top-sites {
@@ -473,44 +464,6 @@
   .top-site-icon { display: flex; flex-shrink: 0; }
   .top-site-icon img, .top-site-icon svg { width: 18px; height: 18px; }
   .top-site-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-
-  .tag-tile {
-    display: inline-flex;
-    flex: none;
-    white-space: nowrap;
-    align-items: center;
-    gap: 8px;
-    text-align: left;
-    background: var(--card);
-    border: none;
-    border-radius: 999px;
-    height: 36px;
-    padding: 0 16px 0 13px;
-    color: var(--ink);
-    cursor: pointer;
-    box-shadow: 0 1px 2px rgba(40, 60, 90, 0.08);
-  }
-  .tag-tile:hover { box-shadow: 0 6px 14px -6px rgba(40, 60, 90, 0.35); }
-  /* タグごとの色(--h は、タグのキーから決めた色相。タグが違えば色が違い、同じタグはいつも同じ色。彩度は落とす) */
-  .tag-tile::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: hsl(var(--h, 220) 38% 52%); flex: none; }
-  .tag-tile[aria-pressed="true"] { background: var(--amber); color: #fff; }
-  .tag-tile[aria-pressed="true"]::before { background: #fff; }
-  .tag-tile[aria-pressed="true"] .tag-tile-count { color: rgba(255, 255, 255, 0.8); }
-  .tag-tile:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
-  .tag-tile.dragging { opacity: 0.45; }
-  .tag-tile.drop-before { box-shadow: -3px 0 0 var(--amber); }
-  .tag-tile.drop-after { box-shadow: 3px 0 0 var(--amber); }
-  /* タグ名は省略しない(長い名前も全文で出す。タグ行は横スクロール) */
-  .tag-tile-name {
-    font-family: var(--font-display);
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-  .tag-tile-count {
-    font-family: var(--font-body);
-    font-size: 0.8rem;
-    color: var(--ink-soft);
-  }
 
   .list-section { padding: 0; }
 
@@ -698,7 +651,7 @@
     position: relative;
   }
 
-  /* アイコンのタイル(ファビコン・地球儀・ファイルのアイコン)。色は、区画のタグの色をくすませたもの */
+  /* アイコンのタイル(ファビコン・地球儀・ファイルのアイコン)。色は、区画のグループの色をくすませたもの */
   .seal {
     width: 44px;
     height: 44px;
@@ -831,7 +784,7 @@
 
   .list-grid { display: flex; flex-direction: column; gap: 0; }
 
-  /* タグ行と件数表示の行を、スクロールしても、ヘッダーの下に固定する(一覧が透けないよう背景を塗る) */
+  /* 件数表示の行を、スクロールしても、ヘッダーの下に固定する(一覧が透けないよう背景を塗る) */
   .sticky-zone {
     position: sticky;
     top: var(--header-h);
@@ -853,7 +806,7 @@
   .filter-status { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; }
   .filter-status[hidden] { display: none; }
 
-  /* 区画: 枠なし。見出しの下に、カードのグリッド(--h は、タグのキーから決めた色相) */
+  /* 区画: 枠なし。見出しの下に、カードのグリッド(--h は、グループの色相 groupHue) */
   .tag-group {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(256px, 1fr));
@@ -862,7 +815,7 @@
   }
   /* 編集フォームのカードは、グリッドの全幅で出す */
   .tag-group > .card:not(.card--list) { grid-column: 1 / -1; }
-  /* 区画の見出し: スクロール中も、固定領域(ヘッダー＋タグ行＋件数表示の行)の下に固定する。長い名前は折り返す */
+  /* 区画の見出し: スクロール中も、固定領域(ヘッダー＋件数表示の行)の下に固定する。長い名前は折り返す */
   .tag-group-head {
     grid-column: 1 / -1;
     position: sticky;
@@ -985,6 +938,7 @@
     .side-col { position: static; max-height: none; }
     .add-grid { grid-template-columns: 1fr 1fr; }
     .add-grid > .field:nth-child(1) { grid-column: 1 / -1; }
+    .filter-popover { right: 12px; max-height: min(520px, calc(100vh - var(--header-h) - 12px)); }
   }
 </style>
 </head>
@@ -1000,6 +954,7 @@
   <div class="header-actions">
     <button class="btn btn-amber" id="toggle-add-btn" type="button">+ 追加</button>
     <button class="btn btn-ghost btn-compact" id="group-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="group-popover">グループ</button>
+    <button class="btn btn-ghost btn-compact" id="tag-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="tag-popover">タグ</button>
     <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">管理</button>
     <button class="btn btn-ghost" id="export-btn" type="button">エクスポート</button>
     <button class="btn btn-ghost" id="import-btn" type="button">インポート</button>
@@ -1008,7 +963,8 @@
   </div>
 </header>
 
-<div class="group-popover" id="group-popover" role="group" aria-label="グループで絞り込む" hidden></div>
+<div class="filter-popover" id="group-popover" role="group" aria-label="グループで絞り込む" hidden></div>
+<div class="filter-popover" id="tag-popover" role="group" aria-label="タグで絞り込む" hidden></div>
 
 <section class="add-panel" id="add-panel" hidden>
   <form id="add-form" class="add-grid">
@@ -1071,7 +1027,7 @@
   <h2>キーボードショートカット</h2>
   <dl class="help-grid">
     <dt><kbd>/</kbd></dt><dd>検索ボックスへフォーカス</dd>
-    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でグループ・タグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; グループのパネル &rarr; 管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
+    <dt><kbd>Esc</kbd></dt><dd>検索欄にフォーカス中は、入力中なら検索をクリア、入力が空でグループ・タグの絞り込み中なら絞り込みを解除。それ以外はヘルプ &rarr; グループ・タグのパネル &rarr; 管理 &rarr; フォームの順に閉じ、何も無ければフォーカスを外す</dd>
   </dl>
 </section>
 
@@ -1088,9 +1044,6 @@
   </div>
   <main class="main">
     <div class="sticky-zone">
-      <section id="tag-section" hidden>
-        <nav class="tag-bar" id="tag-bar" aria-label="タグ"></nav>
-      </section>
       <div class="list-toolbar">
         <p class="result-count" id="result-count"></p>
         <div class="filter-status" id="filter-status" hidden>
@@ -1105,7 +1058,7 @@
 </div>
 
 <footer class="data-controls">
-  <span class="app-version">bookmark-pins v0.4.0</span>
+  <span class="app-version">bookmark-pins v0.5.0</span>
   <span>データはこの端末のブラウザ内(localStorage)に保存されます。</span>
 </footer>
 
@@ -1138,7 +1091,6 @@
   'use strict';
 
   var STORAGE_KEY = 'bookmarks_data';
-  var TAG_ORDER_KEY = 'bookmarks_tag_order';
   var SUGGEST_MAX = 10; // タグ入力で、入力が空のときに出す既存タグの候補の数
   var RECENT_MS = 28 * 24 * 60 * 60 * 1000; // 「よく開く」の集計期間(28日)
   var TOP_SITES_MAX = 10;
@@ -1155,7 +1107,7 @@
     renameDraft: null,      // 改名の入力中(確認の段階を含む)の新しい名前
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
-    colorEditing: null,     // タグ管理モーダルで色を選んでいるタグのキー
+    colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
     manageTab: 'tag'        // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'tag' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
@@ -1219,7 +1171,7 @@
 
   var bookmarks = loadData();
 
-  // タグのタイルの手動の並び(タグのキーの配列)。空なら名前順。ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める
+  // 並びのキーの配列(グループの並び用)を整える: 文字列だけを小文字のキーにして、空と重複を除く
   function sanitizeTagOrder(raw) {
     var out = [];
     if (Array.isArray(raw)) {
@@ -1232,24 +1184,12 @@
     return out;
   }
 
-  function loadTagOrder() {
-    try {
-      return sanitizeTagOrder(JSON.parse(localStorage.getItem(TAG_ORDER_KEY)));
-    } catch (e) {
-      return [];
-    }
-  }
-
-  var tagOrder = loadTagOrder();
-
-  function saveTagOrder() {
-    localStorage.setItem(TAG_ORDER_KEY, JSON.stringify(tagOrder));
-  }
-
-  // グループの並び(グループのキー(小文字)の配列)。タグのタイルの並び(tagOrder)とは別で、グループ管理で決める。無ければ空。
-  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す
+  // グループの並び(グループのキー(小文字)の配列)。グループ管理で決める。無ければ空。
+  // 旧キー bookmarks_group_order は、旧版で「タグごとの区画の順」(タグのキー)に使っていた。新しい意味では読めないので、起動時に消す。
+  // 旧キー bookmarks_tag_order(タグの手動の並び)は廃止した(名前順)ので、これも消す
   var GROUPS_ORDER_KEY = 'bookmarks_groups_order';
   try { localStorage.removeItem('bookmarks_group_order'); } catch (e) { /* 消せなくても起動は続ける */ }
+  try { localStorage.removeItem('bookmarks_tag_order'); } catch (e) { /* 消せなくても起動は続ける */ }
   function loadGroupOrder() {
     try { return sanitizeTagOrder(JSON.parse(localStorage.getItem(GROUPS_ORDER_KEY))); } catch (e) { return []; }
   }
@@ -1263,7 +1203,7 @@
   // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneTagOrder() が外す
   var TAG_COLOR_KEY = 'bookmarks_tag_colors';
   var TAG_COLOR_PRESETS = [0, 25, 45, 75, 140, 165, 190, 215, 245, 275, 305, 335]; // タグ管理で選べる基本の色(色相)
-  function sanitizeTagColors(raw) {
+  function sanitizeColors(raw) {
     var out = Object.create(null);
     if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
       Object.keys(raw).forEach(function (k) {
@@ -1274,11 +1214,21 @@
     return out;
   }
   var tagColors = (function () {
-    try { return sanitizeTagColors(JSON.parse(localStorage.getItem(TAG_COLOR_KEY))); } catch (e) { return Object.create(null); }
+    try { return sanitizeColors(JSON.parse(localStorage.getItem(TAG_COLOR_KEY))); } catch (e) { return Object.create(null); }
   })();
 
   function saveTagColors() {
     localStorage.setItem(TAG_COLOR_KEY, JSON.stringify(tagColors));
+  }
+
+  // グループごとの色(グループのキー → 色相 0〜359)。タグの色とは別に持つ(同名のタグとグループは別の色にできる)。持ち方はタグの色と同じ
+  var GROUP_COLOR_KEY = 'bookmarks_group_colors';
+  var groupColors = (function () {
+    try { return sanitizeColors(JSON.parse(localStorage.getItem(GROUP_COLOR_KEY))); } catch (e) { return Object.create(null); }
+  })();
+
+  function saveGroupColors() {
+    localStorage.setItem(GROUP_COLOR_KEY, JSON.stringify(groupColors));
   }
 
   function makeId() {
@@ -1501,7 +1451,7 @@
     });
   }
 
-  // 全ブックマークで数えたタグの一覧。手動の並び(tagOrder)にあるものを先に、残りは名前順。検索・絞り込みでは変わらない。
+  // 全ブックマークで数えたタグの一覧。名前順。検索・絞り込みでは変わらない。
   function getTags() {
     var map = Object.create(null);
     bookmarks.forEach(function (b) {
@@ -1512,11 +1462,6 @@
       });
     });
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) {
-      var ia = tagOrder.indexOf(a.key);
-      var ib = tagOrder.indexOf(b.key);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
       return a.key.localeCompare(b.key, 'ja');
     });
   }
@@ -1525,20 +1470,18 @@
   // 保存すると、取り込み途中の古い並び・色が、別のタブが先に書いた新しい並びを上書きして消す(データ→並びの順に届くため)
   var syncingFromStorage = false;
 
-  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)をタイルの並び・色・グループの並びから外す。変わったときだけ保存する
+  // 使われなくなったタグ・グループ(削除・編集などで消えたもの)を色・グループの並びから外す。変わったときだけ保存する
   function pruneTagOrder() {
     var used = Object.create(null);
     bookmarks.forEach(function (b) { b.tags.forEach(function (t) { used[tagKey(t)] = true; }); });
-    var kept = tagOrder.filter(function (k) { return used[k]; });
-    if (kept.length !== tagOrder.length) {
-      tagOrder = kept;
-      if (!syncingFromStorage) saveTagOrder();
-    }
     Object.keys(tagColors).forEach(function (k) {
       if (!used[k]) { delete tagColors[k]; if (!syncingFromStorage) saveTagColors(); }
     });
     var usedGroups = Object.create(null);
     bookmarks.forEach(function (b) { if (b.groupName) usedGroups[tagKey(b.groupName)] = true; });
+    Object.keys(groupColors).forEach(function (k) {
+      if (!usedGroups[k]) { delete groupColors[k]; if (!syncingFromStorage) saveGroupColors(); }
+    });
     var keptGroups = groupOrder.filter(function (k) { return usedGroups[k]; });
     if (keptGroups.length !== groupOrder.length) {
       groupOrder = keptGroups;
@@ -1657,8 +1600,8 @@
     if (state.selectedId !== null && visibleIds.indexOf(state.selectedId) === -1) state.selectedId = null;
     renderTopSites();
     renderRecentSites();
-    renderTagBar();
-    renderGroupPopover();
+    renderFilterPanel('tag');
+    renderFilterPanel('group');
     renderList();
     renderDetail();
     addTagPicker.refresh();
@@ -1863,73 +1806,21 @@
   // タグの色相(0〜359)。タグ管理で選んだ色があればそれ、なければタグのキーから決める(同じタグはいつも同じ色)
   function tagHue(key) {
     if (tagColors[key] !== undefined) return tagColors[key];
+    return autoHue(key);
+  }
+
+  // グループの色相。グループの管理で選んだ色があればそれ、なければグループのキーから決める(タグの色は見ない)
+  function groupHue(key) {
+    if (groupColors[key] !== undefined) return groupColors[key];
+    return autoHue(key);
+  }
+
+  // 選んだ色が無いときの色相(キーから決める)
+  function autoHue(key) {
     var h = 0;
     for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
     return h;
   }
-
-  // hue が無いとき(「タグなし」)は、CSS の既定の色相になる
-  function tagTileHtml(name, count, isOn, attr, hue) {
-    return '<button type="button" class="tag-tile" ' + attr + (hue === undefined ? '' : ' style="--h:' + hue + '"') + ' aria-pressed="' + isOn + '">' +
-      '<b class="tag-tile-name">' + (isOn ? '✓ ' : '') + escapeHtml(name) + '</b>' +
-      '<span class="tag-tile-count">' + count + '</span>' +
-    '</button>';
-  }
-
-  // 全タグ(件数付き)と、末尾の「タグなし」。件数は全ブックマークで数え、検索・絞り込みでは変わらない。
-  function renderTagBar() {
-    var untagged = countUntagged();
-    var html = getTags().map(function (t) {
-      return tagTileHtml(t.name, t.count, state.filterTag === t.key, 'data-tag="' + escapeHtml(t.key) + '"', tagHue(t.key));
-    }).join('');
-    if (untagged) html += tagTileHtml('タグなし', untagged, state.filterUntagged, 'data-untagged="1"');
-    var bar = document.getElementById('tag-bar');
-    document.getElementById('tag-section').hidden = !html;
-    var scrollLeft = bar.scrollLeft; // 作り直しても、横スクロールの位置を保つ
-    bar.innerHTML = html;
-    bar.scrollLeft = scrollLeft;
-    // タグのタイルは、ドラッグで並べ替えられる(「タグなし」は末尾に固定)
-    Array.prototype.forEach.call(bar.querySelectorAll('.tag-tile[data-tag]'), function (tile) {
-      tile.setAttribute('draggable', 'true');
-      bindDragReorder(tile, tile.getAttribute('data-tag'), {
-        getDragged: function () { return draggedTagKey; },
-        setDragged: function (v) { draggedTagKey = v; },
-        dropEffect: 'move',
-        horizontal: true,
-        onDrop: moveTag
-      });
-    });
-  }
-
-  // タグ行の上のホイール(縦)を横スクロールに変える。端に着いたら、ページの縦スクロールに任せる。
-  document.getElementById('tag-bar').addEventListener('wheel', function (e) {
-    var bar = e.currentTarget;
-    if (bar.scrollWidth <= bar.clientWidth || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-    if (e.deltaY < 0 && bar.scrollLeft <= 0) return;
-    if (e.deltaY > 0 && bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 1) return;
-    e.preventDefault();
-    bar.scrollLeft += e.deltaY;
-  }, { passive: false });
-
-  // タイルは単一選択: 押したタグだけに絞る。別のタイルで切り替わり、同じタイルをもう一度押すと外れる。
-  document.getElementById('tag-bar').addEventListener('click', function (e) {
-    var tile = e.target.closest('.tag-tile');
-    if (!tile) return;
-    var isUntagged = tile.hasAttribute('data-untagged');
-    var key = tile.getAttribute('data-tag');
-    var wasOn = isUntagged ? state.filterUntagged : state.filterTag === key;
-    state.filterTag = null;
-    state.filterUntagged = false;
-    if (!wasOn) {
-      if (isUntagged) state.filterUntagged = true; else state.filterTag = key;
-    }
-    render();
-    // 再描画でタイルが作り直されるため、押したタイルへフォーカスを戻す
-    var again = Array.prototype.filter.call(document.querySelectorAll('#tag-bar .tag-tile'), function (t) {
-      return isUntagged ? t.hasAttribute('data-untagged') : t.getAttribute('data-tag') === key;
-    })[0];
-    if (again) again.focus();
-  });
 
   // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(グループ・タグの絞り込み中は有効)
   function canReorder() {
@@ -1961,67 +1852,103 @@
   }
   document.getElementById('filter-clear-btn').addEventListener('click', clearFilter);
 
-  /* ---------- グループの絞り込みのパネル ---------- */
+  /* ---------- グループ・タグの絞り込みのパネル(kind は 'tag' か 'group') ---------- */
 
-  var groupFilterBtn = document.getElementById('group-filter-btn');
-  var groupPopover = document.getElementById('group-popover');
+  var filterPanels = {
+    tag: { btn: document.getElementById('tag-filter-btn'), popover: document.getElementById('tag-popover'), label: 'タグ', noneName: 'タグなし' },
+    group: { btn: document.getElementById('group-filter-btn'), popover: document.getElementById('group-popover'), label: 'グループ', noneName: 'グループなし' }
+  };
 
-  // 「すべて」と各グループ(件数付き)、1 行 1 つ。「グループなし」は、該当があるときだけ。件数は全ブックマークで数える
-  function renderGroupPopover() {
-    var rows = [{ attr: 'data-group-all="1"', name: 'すべて', count: bookmarks.length, on: state.filterGroup === null }];
-    getGroups().forEach(function (g) {
-      rows.push({ attr: 'data-group-filter="' + escapeHtml(g.key) + '"', name: g.name, count: g.count, on: state.filterGroup === g.key });
+  // 絞り込みの値: null は「すべて」、'' は「タグなし」「グループなし」、それ以外はキー
+  function filterValue(kind) {
+    if (kind === 'group') return state.filterGroup;
+    return state.filterUntagged ? '' : state.filterTag;
+  }
+
+  function setFilterValue(kind, value) {
+    if (kind === 'group') { state.filterGroup = value; return; }
+    state.filterTag = value === '' ? null : value;
+    state.filterUntagged = value === '';
+  }
+
+  // hue が null なら色の点を出さない(「すべて」)。undefined なら CSS の既定の色相(「タグなし」「グループなし」)
+  function filterRowHtml(attr, name, count, on, hue) {
+    return '<button type="button" class="filter-row" ' + attr + ' aria-pressed="' + on + '"' + (typeof hue === 'number' ? ' style="--h:' + hue + '"' : '') + '>' +
+      (hue === null ? '' : '<span class="filter-row-dot"></span>') +
+      '<span class="filter-row-name">' + escapeHtml(name) + '</span><span class="filter-row-count">' + count + '</span></button>';
+  }
+
+  // 「すべて」と各タグ・グループ(件数付き)、1 行 1 つ。「タグなし」「グループなし」は、該当があるときだけ。件数は全ブックマークで数える
+  function renderFilterPanel(kind) {
+    var p = filterPanels[kind];
+    var cur = filterValue(kind);
+    var items = kind === 'tag' ? getTags() : getGroups();
+    var none = kind === 'tag' ? countUntagged() : countUngrouped();
+    var html = filterRowHtml('data-filter-all="1"', 'すべて', bookmarks.length, cur === null, null);
+    items.forEach(function (t) {
+      html += filterRowHtml('data-filter-key="' + escapeHtml(t.key) + '"', t.name, t.count, cur === t.key, kind === 'tag' ? tagHue(t.key) : groupHue(t.key));
     });
-    var ungrouped = countUngrouped();
-    if (ungrouped) rows.push({ attr: 'data-group-filter=""', name: 'グループなし', count: ungrouped, on: state.filterGroup === '' });
-    groupPopover.innerHTML = rows.map(function (r) {
-      return '<button type="button" class="group-row" ' + r.attr + ' aria-pressed="' + r.on + '">' +
-        '<span class="group-row-name">' + escapeHtml(r.name) + '</span><span class="group-row-count">' + r.count + '</span></button>';
-    }).join('');
+    if (none) html += filterRowHtml('data-filter-none="1"', p.noneName, none, cur === '');
+    p.popover.innerHTML = html;
 
-    // ボタンの文字は、絞り込み中なら「グループ: ○○」(長いときは省略。全文は title)
-    var label = 'グループ';
-    if (state.filterGroup !== null) {
-      var cur = getGroups().filter(function (g) { return g.key === state.filterGroup; })[0];
-      label = 'グループ: ' + (state.filterGroup === '' ? 'グループなし' : cur ? cur.name : state.filterGroup);
+    // ボタンの文字は、絞り込み中なら「タグ: ○○」「グループ: ○○」(長いときは省略。全文は title)
+    var label = p.label;
+    if (cur !== null) {
+      var item = items.filter(function (t) { return t.key === cur; })[0];
+      label = p.label + ': ' + (cur === '' ? p.noneName : item ? item.name : cur);
     }
-    groupFilterBtn.textContent = label;
-    groupFilterBtn.title = label;
-    groupFilterBtn.classList.toggle('active', state.filterGroup !== null);
+    p.btn.textContent = label;
+    p.btn.title = label;
+    p.btn.classList.toggle('active', cur !== null);
   }
 
-  function openGroupPopover() {
-    groupPopover.hidden = false;
-    groupFilterBtn.setAttribute('aria-expanded', 'true');
+  // 開いているパネルの kind(どちらも閉じていれば null)
+  function openFilterKind() {
+    if (!filterPanels.tag.popover.hidden) return 'tag';
+    if (!filterPanels.group.popover.hidden) return 'group';
+    return null;
   }
 
-  function closeGroupPopover() {
-    groupPopover.hidden = true;
-    groupFilterBtn.setAttribute('aria-expanded', 'false');
+  // 同時に開けるのは 1 つ。もう一方は先に閉じる
+  function openFilterPanel(kind) {
+    closeFilterPanels();
+    filterPanels[kind].popover.hidden = false;
+    filterPanels[kind].btn.setAttribute('aria-expanded', 'true');
+    // パネルは DOM の末尾にあり Tab では届かないので、選択中の行(無ければ「すべて」)へフォーカスを移す
+    var first = filterPanels[kind].popover.querySelector('.filter-row[aria-pressed="true"]') || filterPanels[kind].popover.querySelector('[data-filter-all]');
+    if (first) first.focus();
   }
 
-  groupFilterBtn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    if (groupPopover.hidden) openGroupPopover(); else closeGroupPopover();
-  });
+  function closeFilterPanels() {
+    ['tag', 'group'].forEach(function (kind) {
+      filterPanels[kind].popover.hidden = true;
+      filterPanels[kind].btn.setAttribute('aria-expanded', 'false');
+    });
+  }
 
-  // 選んだら、絞り込んでパネルを閉じる。もう一度同じグループを選ぶと、絞り込みが外れる
-  groupPopover.addEventListener('click', function (e) {
-    var row = e.target.closest('.group-row');
-    if (!row) return;
-    if (row.hasAttribute('data-group-all')) state.filterGroup = null;
-    else {
-      var key = row.getAttribute('data-group-filter');
-      state.filterGroup = state.filterGroup === key ? null : key;
-    }
-    closeGroupPopover();
-    render();
-    groupFilterBtn.focus();
+  ['tag', 'group'].forEach(function (kind) {
+    var p = filterPanels[kind];
+    p.btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (p.popover.hidden) openFilterPanel(kind); else closeFilterPanels();
+    });
+
+    // 選んだら、絞り込んでパネルを閉じる。もう一度同じものを選ぶと、絞り込みが外れる
+    p.popover.addEventListener('click', function (e) {
+      var row = e.target.closest('.filter-row');
+      if (!row) return;
+      var value = row.hasAttribute('data-filter-all') ? null : row.hasAttribute('data-filter-none') ? '' : row.getAttribute('data-filter-key');
+      setFilterValue(kind, value === filterValue(kind) ? null : value);
+      closeFilterPanels();
+      render();
+      p.btn.focus();
+    });
   });
 
   // パネルの外を押したら閉じる
   document.addEventListener('click', function (e) {
-    if (!groupPopover.hidden && !groupPopover.contains(e.target) && e.target !== groupFilterBtn) closeGroupPopover();
+    var kind = openFilterKind();
+    if (kind && !filterPanels[kind].popover.contains(e.target) && e.target !== filterPanels[kind].btn) closeFilterPanels();
   });
 
   // 編集を始める。編集フォームは全幅で出て、押した場所から離れることがあるので、フォームを見える位置へ動かす
@@ -2065,7 +1992,7 @@
 
     container.innerHTML = items.length
       ? groupItems(items).map(function (g) {
-          return '<section class="tag-group" data-group="' + escapeHtml(g.key) + '"' + (g.key ? ' style="--h:' + tagHue(g.key) + '"' : '') + '>' +
+          return '<section class="tag-group" data-group="' + escapeHtml(g.key) + '"' + (g.key ? ' style="--h:' + groupHue(g.key) + '"' : '') + '>' +
             '<h3 class="tag-group-head">' + escapeHtml(g.name) + '<span class="tag-group-count">' + g.items.length + '</span></h3>' +
             g.items.map(rowHtml).join('') + '</section>';
         }).join('')
@@ -2097,7 +2024,7 @@
       var delBtn = card.querySelector('[data-action="delete"]');
       if (editBtn) editBtn.addEventListener('click', function () { startEdit(b.id); });
       if (delBtn) delBtn.addEventListener('click', function () { handleDelete(b.id); });
-      // 行のタグを押すと、そのタグで絞り込む(タイルを押したときと同じ状態にする)
+      // 行のタグを押すと、そのタグで絞り込む(タグのパネルで選んだときと同じ状態にする)
       Array.prototype.forEach.call(card.querySelectorAll('[data-action="filter-tag"]'), function (chip) {
         chip.addEventListener('click', function () {
           state.filterTag = chip.getAttribute('data-tag');
@@ -2160,7 +2087,7 @@
   }
 
   // タグ管理モーダルのリスト全体を再描画する。render()から、モーダルが開いている間だけ呼ばれる。
-  // 「タグ」「グループ」の 2 つのタブ(state.manageTab)。タグのタブは、改名・削除・色。グループのタブは、改名・削除・並べ替え(色は持たない)。
+  // 「タグ」「グループ」の 2 つのタブ(state.manageTab)。タグのタブは、改名・削除・色。グループのタブは、改名・削除・色・並べ替え。
   // 行・ボタンのデータ属性と data-action の名前は、2 つのタブで共通。どちらの操作かは state.manageTab で振り分ける。
   function renderTagManageModal() {
     var isGroup = state.manageTab === 'group';
@@ -2223,27 +2150,32 @@
     '</li>';
   }
 
-  // グループの行: グリップ(ドラッグで並べ替え)・名前・件数・▲▼・改名・削除。色は持たない
+  // グループの行: 色・グリップ(ドラッグで並べ替え)・名前・件数・▲▼・改名・削除。
+  // 色を選んでいる間は、スライダーを動かせるよう draggable を外す
   function renderGroupManageRow(g, index, total) {
     var key = escapeHtml(g.key);
     var name = escapeHtml(g.name);
     if (state.confirmRename === g.key) return renderRenameConfirmRow(g);
     if (state.editingTag === g.key) return renderRenameFormRow(g.key, g.name);
-    return '<li class="tag-manage-row" data-tag="' + key + '" draggable="true">' +
+    var picking = state.colorEditing === g.key;
+    return '<li class="tag-manage-row" data-tag="' + key + '"' + (picking ? '' : ' draggable="true"') + '>' +
+      '<button type="button" class="tag-color-btn" data-action="toggle-tag-color" data-tag="' + key + '" style="--h:' + groupHue(g.key) + '" aria-label="' + name + 'の色を選ぶ" aria-expanded="' + picking + '"></button>' +
       '<span class="row-grip" aria-hidden="true">⠿</span>' +
       '<span class="tag-manage-name">' + name + '</span>' +
       '<span class="tag-manage-count">' + g.count + '</span>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-up" data-tag="' + key + '" aria-label="' + name + 'を上へ"' + (index === 0 ? ' disabled' : '') + '>▲</button>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-down" data-tag="' + key + '" aria-label="' + name + 'を下へ"' + (index === total - 1 ? ' disabled' : '') + '>▼</button>' +
       manageActionButtons(g) +
+      (picking ? renderTagColorPicker(g) : '') +
     '</li>';
   }
 
-  // 色の選び方: 基本の12色(丸)・「自動」(タグ名から決める)・色相のスライダー
+  // 色の選び方: 基本の12色(丸)・「自動」(名前から決める)・色相のスライダー。タグ・グループのどちらの色かは state.manageTab で決める
   function renderTagColorPicker(t) {
     var key = escapeHtml(t.key);
-    var hue = tagHue(t.key);
-    var isAuto = tagColors[t.key] === undefined;
+    var isGroup = state.manageTab === 'group';
+    var hue = isGroup ? groupHue(t.key) : tagHue(t.key);
+    var isAuto = (isGroup ? groupColors : tagColors)[t.key] === undefined;
     return '<div class="tag-color-picker">' +
       TAG_COLOR_PRESETS.map(function (h) {
         return '<button type="button" class="tag-color-swatch" data-action="set-tag-color" data-tag="' + key + '" data-hue="' + h + '" style="--h:' + h + '" aria-label="色相 ' + h + '" aria-pressed="' + (!isAuto && hue === h) + '"></button>';
@@ -2322,8 +2254,9 @@
       state.confirmRename = null;
       state.renameDraft = null;
     } else if (action === 'set-tag-color' || action === 'auto-tag-color') {
-      if (action === 'set-tag-color') tagColors[key] = Number(btn.getAttribute('data-hue')); else delete tagColors[key];
-      saveTagColors();
+      var colors = manageColors();
+      if (action === 'set-tag-color') colors[key] = Number(btn.getAttribute('data-hue')); else delete colors[key];
+      saveManageColors();
       render(); // タグ管理が開いている間は、render() がモーダルも描き直す
       var again = tagManageList.querySelector('[data-action="' + action + '"]' + (action === 'set-tag-color' ? '[data-hue="' + btn.getAttribute('data-hue') + '"]' : ''));
       if (again) again.focus();
@@ -2342,6 +2275,14 @@
     renderTagManageModal();
   });
 
+  // 管理モーダルで選ぶ色の入れ物(いまのタブがグループならグループの色、タグならタグの色)と、その保存
+  function manageColors() {
+    return state.manageTab === 'group' ? groupColors : tagColors;
+  }
+  function saveManageColors() {
+    if (state.manageTab === 'group') saveGroupColors(); else saveTagColors();
+  }
+
   // スライダーは、動かしている間は行の色の見本だけを変え、離したとき(change)に保存して描き直す
   tagManageList.addEventListener('input', function (e) {
     if (!e.target.classList.contains('tag-color-range')) return;
@@ -2350,8 +2291,8 @@
   });
   tagManageList.addEventListener('change', function (e) {
     if (!e.target.classList.contains('tag-color-range')) return;
-    tagColors[e.target.getAttribute('data-tag')] = Number(e.target.value);
-    saveTagColors();
+    manageColors()[e.target.getAttribute('data-tag')] = Number(e.target.value);
+    saveManageColors();
     render();
     var again = tagManageList.querySelector('.tag-color-range');
     if (again) again.focus();
@@ -2399,8 +2340,6 @@
       b.tags = out;
     });
     if (state.filterTag === oldKey) state.filterTag = newKey; // 絞り込みは新しい名前へ引き継ぐ
-    tagOrder = sanitizeTagOrder(tagOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
-    saveTagOrder();
     if (newKey !== oldKey && tagColors[oldKey] !== undefined) { // 色も新しい名前へ引き継ぐ(統合のときは、既存のタグの色を優先する)
       if (tagColors[newKey] === undefined) tagColors[newKey] = tagColors[oldKey];
       delete tagColors[oldKey];
@@ -2443,6 +2382,11 @@
     if (state.filterGroup === oldKey) state.filterGroup = newKey; // 絞り込みは新しい名前へ引き継ぐ
     groupOrder = sanitizeTagOrder(groupOrder.map(function (k) { return k === oldKey ? newKey : k; })); // 並びは新しい名前へ引き継ぐ(統合で重なったら先の位置)
     saveGroupOrder();
+    if (newKey !== oldKey && groupColors[oldKey] !== undefined) { // 色も新しい名前へ引き継ぐ(統合のときは、既存のグループの色を優先する)
+      if (groupColors[newKey] === undefined) groupColors[newKey] = groupColors[oldKey];
+      delete groupColors[oldKey];
+      saveGroupColors();
+    }
     saveData(bookmarks);
     render();
   }
@@ -2462,7 +2406,7 @@
   //   getDragged/setDragged: ドラッグ中の識別子を保持するアクセサ(呼び出し元のモジュール変数を橋渡しする)
   //   dropEffect: dragover時にdataTransfer.dropEffectへ設定する値(省略可)
   //   onDrop(draggedKey, key, after): ドロップ確定時に呼ばれる並べ替え処理
-  //   horizontal: true なら、前後を要素の左右の半分で判定する(省略時は上下。折り返して並ぶタイル用)
+  //   horizontal: true なら、前後を要素の左右の半分で判定する(省略時は上下。チップ・グリッドのカードなど、横に並ぶ要素用)
   function bindDragReorder(el, key, opts) {
     el.addEventListener('dragstart', function (e) {
       opts.setDragged(key);
@@ -2507,19 +2451,7 @@
 
   var draggedCardId = null;
   var draggedGroup = null; // ドラッグ中の行がある区画のキー
-  var draggedTagKey = null;
   var draggedGroupKey = null; // グループ管理でドラッグ中のグループのキー
-
-  // targetKey のタグの直前(after=false)または直後(after=true)に draggedKey のタグを移動する。いまの表示順を、そのまま手動の並びにする。
-  function moveTag(draggedKey, targetKey, after) {
-    var keys = getTags().map(function (t) { return t.key; });
-    if (draggedKey === targetKey || keys.indexOf(draggedKey) === -1 || keys.indexOf(targetKey) === -1) return;
-    keys.splice(keys.indexOf(draggedKey), 1);
-    keys.splice(keys.indexOf(targetKey) + (after ? 1 : 0), 0, draggedKey);
-    tagOrder = keys;
-    saveTagOrder();
-    render();
-  }
 
   // targetKey のグループの直前(after=false)または直後(after=true)に draggedKey のグループを移動する。いまの区画の順を、そのまま保存する。
   function moveGroup(draggedKey, targetKey, after) {
@@ -2951,7 +2883,7 @@
     }
   }
 
-  // 先頭の # を1文字だけ除いた残りを含むタグを、タグ行と同じ順に出す。一致するタグがなければ閉じる
+  // 先頭の # を1文字だけ除いた残りを含むタグを、タグのパネルと同じ順(名前順)に出す。一致するタグがなければ閉じる
   function updateTagSuggest() {
     var v = searchInput.value;
     if (!isTagQuery(v) || document.activeElement !== searchInput) { closeTagSuggest(); return; }
@@ -2967,7 +2899,7 @@
     renderTagSuggestActive();
   }
 
-  // key のタグで絞り込み、検索ボックスを空にする。タグ行の該当タイルが見えない位置にあるときは、見える位置まで動かす
+  // key のタグで絞り込み、検索ボックスを空にする(「タグ」ボタンの文字は render() が替える)
   function chooseTag(key) {
     state.filterTag = key;
     state.filterUntagged = false;
@@ -2976,8 +2908,6 @@
     closeTagSuggest();
     updateSearchClearVisibility();
     render();
-    var tile = document.querySelector('#tag-bar .tag-tile[data-tag="' + CSS.escape(key) + '"]');
-    if (tile) tile.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   tagSuggestEl.addEventListener('mousedown', function (e) {
@@ -3027,7 +2957,7 @@
   /* ---------- エクスポート / インポート ---------- */
 
   document.getElementById('export-btn').addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, tagOrder: tagOrder, groupOrder: groupOrder, tagColors: tagColors }, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify({ version: 4, bookmarks: bookmarks, groupOrder: groupOrder, tagColors: tagColors, groupColors: groupColors }, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -3057,16 +2987,16 @@
         alert('JSONの読み込みに失敗しました。ファイルの内容を確認してください。');
         return;
       }
-      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, tagOrder, groupOrder } のオブジェクト
+      // 旧式(v1.x・初期の v2.0.0)のエクスポートはブックマークの配列。新式は { bookmarks, groupOrder, tagColors, groupColors } のオブジェクト
       var list = Array.isArray(parsed) ? parsed : (parsed && Array.isArray(parsed.bookmarks) ? parsed.bookmarks : null);
       if (!list) {
         alert('インポートするJSONはブックマークの配列か、bookmarks を含むオブジェクトである必要があります。');
         return;
       }
-      var importedOrder = sanitizeTagOrder(Array.isArray(parsed) ? [] : parsed.tagOrder);
       // groupOrder は、version 3 以降だけ、グループのキーとして読む(旧版の groupOrder は、タグごとの区画の順だった)
       var importedGroupOrder = !Array.isArray(parsed) && parsed.version >= 3 ? sanitizeTagOrder(parsed.groupOrder) : [];
-      var importedColors = sanitizeTagColors(Array.isArray(parsed) ? null : parsed.tagColors);
+      var importedColors = sanitizeColors(Array.isArray(parsed) ? null : parsed.tagColors);
+      var importedGroupColors = sanitizeColors(Array.isArray(parsed) ? null : parsed.groupColors);
 
       var sanitized = list.map(sanitizeBookmark).filter(Boolean);
       sanitized.forEach(function (b, i) { b.order = i; });
@@ -3079,13 +3009,13 @@
         return;
       }
       bookmarks = sanitized;
-      tagOrder = importedOrder;
       groupOrder = importedGroupOrder;
       tagColors = importedColors;
+      groupColors = importedGroupColors;
       saveData(bookmarks);
-      saveTagOrder();
       saveGroupOrder();
       saveTagColors();
+      saveGroupColors();
       state.editingId = null;
       render();
     };
@@ -3111,7 +3041,7 @@
     toggleHelp();
   });
 
-  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → グループのパネル → タグ管理モーダル → 各種フォーム(編集・追加)。
+  // Escapeは「手前にあるもの」から1段階ずつ閉じる: ヘルプ → 絞り込みのパネル(グループ・タグ) → タグ管理モーダル → 各種フォーム(編集・追加)。
   // フォームは2種をまとめて1段階として扱う(同時に開いていても1回のEscapeで閉じ切る)。閉じる層が何も無ければ、最後にフォーカスを外す。
   function closeTopmostLayer() {
     if (!helpPanel.hidden) {
@@ -3119,9 +3049,10 @@
       return;
     }
 
-    if (!groupPopover.hidden) {
-      closeGroupPopover();
-      groupFilterBtn.focus();
+    var openKind = openFilterKind();
+    if (openKind) {
+      closeFilterPanels();
+      filterPanels[openKind].btn.focus();
       return;
     }
 
@@ -3162,12 +3093,12 @@
     if (e.ctrlKey || e.metaKey || e.altKey) return; // ブラウザ標準のショートカットを妨げない
 
     if (e.key === 'Escape') {
-      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
+      if (e.target === searchInput && searchInput.value && tagManageOverlay.hidden && helpPanel.hidden && openFilterKind() === null) {
         clearSearch();
         return;
       }
       // 検索欄が空で、タグで絞り込み中のときは、絞り込みを外す(キーボードだけで解除できるように)
-      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged || state.filterGroup !== null) && tagManageOverlay.hidden && helpPanel.hidden && groupPopover.hidden) {
+      if (e.target === searchInput && (state.filterTag !== null || state.filterUntagged || state.filterGroup !== null) && tagManageOverlay.hidden && helpPanel.hidden && openFilterKind() === null) {
         clearFilter();
         return;
       }
@@ -3191,9 +3122,9 @@
   // 別のタブが保存したデータを取り込む。取り込まないと、古いタブの次の保存が、新しい変更を上書きして消す
   window.addEventListener('storage', function (e) {
     if (e.key === STORAGE_KEY) bookmarks = loadData();
-    else if (e.key === TAG_ORDER_KEY) tagOrder = loadTagOrder();
     else if (e.key === GROUPS_ORDER_KEY) groupOrder = loadGroupOrder();
-    else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeTagColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
+    else if (e.key === TAG_COLOR_KEY) { try { tagColors = sanitizeColors(JSON.parse(e.newValue)); } catch (err) { tagColors = Object.create(null); } }
+    else if (e.key === GROUP_COLOR_KEY) { try { groupColors = sanitizeColors(JSON.parse(localStorage.getItem(GROUP_COLOR_KEY))); } catch (err) { groupColors = Object.create(null); } }
     else return;
     syncingFromStorage = true;
     try { render(); } finally { syncingFromStorage = false; }

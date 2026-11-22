@@ -23,6 +23,11 @@ async function open(p, data) {
   await p.evaluate(() => { window.confirm = () => true; window.alert = () => {}; });
 }
 const titles = (p) => p.$$eval('.card--list .card-title a', (els) => els.map((e) => e.textContent));
+// タグのパネルを開いて、key のタグを選ぶ
+async function pickTag(p, key) {
+  await p.click('#tag-filter-btn');
+  await p.click('#tag-popover [data-filter-key="' + key + '"]');
+}
 async function add(p, title, url) {
   await p.click('#toggle-add-btn');
   await p.fill('#new-url', url || 'https://' + title + '.example.com');
@@ -56,7 +61,7 @@ await tab2.close();
 await open(page, [bm(0, { tags: ['t1'] })]);
 await page.click('[data-action="edit"]');
 await page.fill('#edit-memo', 'unsaved memo');
-await page.click('.tag-tile[data-tag="t1"]');
+await pickTag(page, 't1');
 check('編集中のメモが再描画で消えない', (await page.$eval('#edit-memo', (e) => e.value)) === 'unsaved memo');
 
 // 自動タグ付けは無い: 既存のタグ名に当たる入力でも、追加フォームのタグは空のまま
@@ -240,14 +245,14 @@ const chipInfo = await page.evaluate(() => {
 });
 check('長いタグ名は省略されない', chipInfo.first === longTag && chipInfo.overflow !== 'ellipsis', chipInfo);
 check('チップは 3 行まで。残りは +N', chipInfo.hidden > 0 && chipInfo.more === '+' + chipInfo.hidden, chipInfo);
-const tileInfo = await page.$eval('.tag-tile[data-tag] .tag-tile-name', (e) => ({ text: e.textContent, overflow: getComputedStyle(e).textOverflow }));
-check('タグのタイルは名前を省略しない', tileInfo.overflow !== 'ellipsis' && tileInfo.text.length > 0, tileInfo);
+const rowInfo = await page.$$eval('#tag-popover .filter-row-name', (els, name) => els.filter((e) => e.textContent === name).map((e) => getComputedStyle(e).textOverflow), longTag);
+check('タグのパネルの行は名前を省略しない', rowInfo.length === 1 && rowInfo[0] !== 'ellipsis', rowInfo);
 
 // 編集フォームが区画の中で出て、入力中の内容が、グリッドの再描画で消えない
 await open(page, [bm(0, { tags: ['t1'] }), bm(1, { tags: ['t1'] })]);
 await page.click('.card--list [data-action="edit"]');
 await page.fill('#edit-memo', 'draft');
-await page.click('.tag-tile[data-tag="t1"]');
+await pickTag(page, 't1');
 check('編集フォームが全幅の 1 枚で出て、入力が残る', (await page.$$('#edit-memo')).length === 1 && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft');
 
 // 詳細パネル: 項目が出て、パスワードは伏せ字(値は出さない)。回数が出る
@@ -257,10 +262,10 @@ const det = await page.$eval('#detail', (e) => e.textContent);
 check('詳細にパスワードの値は出ない', !det.includes('secret-pw') && det.includes('●●●●●●●●'), det);
 check('詳細に回数と注記が出る', det.includes('直近28日に開いた回数') && det.includes('パスワードは平文で保存されます'), det);
 
-// 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行は隠れる
+// 空の画面: ブックマーク 0 件のとき、案内が出て、タグ行(#tag-section・#tag-bar)は無い
 await open(page, []);
 check('0 件のとき案内が出る', (await page.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'));
-check('タグが 0 個のとき、タグ行の区画は隠れる', await page.$eval('#tag-section', (e) => e.hidden));
+check('タグ行(#tag-section・#tag-bar)は無い', (await page.$('#tag-section')) === null && (await page.$('#tag-bar')) === null);
 
 // ===== グループ(データ層) =====
 async function importJson(p, obj) {
@@ -327,10 +332,10 @@ check('特殊文字のグループ名が見出しにそのまま出る', special
 await open(page, [bm(0, { groupName: '仕事', tags: ['t1'] }), bm(1, { groupName: '仕事', tags: ['t2'] }), bm(2, { groupName: '資料室' }), bm(3)]);
 await page.click('#group-filter-btn');
 check('パネルが開く', (await page.$eval('#group-popover', (e) => !e.hidden)) && (await page.$eval('#group-filter-btn', (e) => e.getAttribute('aria-expanded'))) === 'true');
-await page.click('[data-group-filter="資料室"]');
+await page.click('#group-popover [data-filter-key="資料室"]');
 check('グループで絞ると、その区画だけ', JSON.stringify(await sections()) === JSON.stringify(['資料室:1']), await sections());
 check('パネルは選んだら閉じる', await page.$eval('#group-popover', (e) => e.hidden));
-await page.click('.tag-tile[data-tag="t2"]');
+await pickTag(page, 't2');
 check('グループとタグは AND(該当なしなら区画が無い)', (await sections()).length === 0);
 await page.click('#filter-clear-btn');
 check('解除でグループとタグの両方が外れる', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
@@ -338,13 +343,13 @@ check('解除でグループとタグの両方が外れる', JSON.stringify(awai
 // 同名のタグとグループは、別の絞り込みとして動く
 await open(page, [bm(0, { groupName: 'x', tags: ['y'] }), bm(1, { groupName: 'y', tags: ['x'] })]);
 await page.click('#group-filter-btn');
-await page.click('[data-group-filter="x"]');
+await page.click('#group-popover [data-filter-key="x"]');
 check('グループ x は、タグ x の行を巻き込まない', (await titles(page)).join() === 'T0', await titles(page));
 
 // 絞り込み中のグループが無くなったら、絞り込みが外れる(画面が空にならない)
 await open(page, [bm(0, { groupName: 'solo' }), bm(1, { groupName: 'other' })]);
 await page.click('#group-filter-btn');
-await page.click('[data-group-filter="solo"]');
+await page.click('#group-popover [data-filter-key="solo"]');
 await page.click('.card--list [data-action="delete"]');
 check('絞り込み中のグループが消えたら、残りが出る', (await titles(page)).length === 1, await titles(page));
 
@@ -353,7 +358,7 @@ await open(page, [bm(0, { groupName: 'solo' }), bm(1, { groupName: 'other' })]);
 await page.evaluate(() => localStorage.setItem('bookmarks_groups_order', JSON.stringify(['solo', 'other'])));
 await page.reload();
 await page.click('#group-filter-btn');
-await page.click('[data-group-filter="solo"]');
+await page.click('#group-popover [data-filter-key="solo"]');
 await page.click('.card--list [data-action="edit"]');
 await page.fill('#edit-group-text', 'other');
 await page.click('[data-edit-form] button[type=submit]');
@@ -450,7 +455,7 @@ await page.click('#tag-manage-list [data-action="move-tag-down"][data-tag="a"]')
 check('▼ で並びが変わり、保存される', JSON.stringify(await rowNames()) === JSON.stringify(['b', 'a', 'c']) && JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['b', 'a', 'c']), await rowNames());
 await tabM.waitForTimeout(300);
 await tabM.click('#group-filter-btn');
-const orderM = await tabM.$$eval('#group-popover .group-row-name', (els) => els.map((e) => e.textContent));
+const orderM = await tabM.$$eval('#group-popover .filter-row-name', (els) => els.map((e) => e.textContent));
 check('並びが別のタブにも届く', JSON.stringify(orderM) === JSON.stringify(['すべて', 'b', 'a', 'c']), orderM);
 await tabM.close();
 
@@ -481,7 +486,7 @@ check('グループの削除はブックマークを残す', afterDelete.length 
 // 絞り込み中のグループを改名すると、絞り込みが新しい名前へ引き継がれる
 await open(page, [bm(0, { groupName: 'old' })]);
 await page.click('#group-filter-btn');
-await page.click('[data-group-filter="old"]');
+await page.click('#group-popover [data-filter-key="old"]');
 await page.click('#tag-manage-open-btn');
 await page.click('[data-manage-tab="group"]');
 await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="old"]');
@@ -494,7 +499,7 @@ check('絞り込みが新しい名前へ引き継がれる', (await page.$$eval(
 // 同名のタグとグループ: タグの改名は、グループの絞り込み・並びに影響しない
 await open(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
 await page.click('#group-filter-btn');
-await page.click('[data-group-filter="same"]');
+await page.click('#group-popover [data-filter-key="same"]');
 await page.click('#tag-manage-open-btn');
 await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="same"]');
 await page.fill('.tag-rename-input', 'renamed');
@@ -515,7 +520,7 @@ await importJson(page, { version: 4, bookmarks: [bm(0, { groupName: 'z' }), bm(1
 await tabB.waitForTimeout(500);
 check('インポートした groupOrder が、別のタブの再描画で消えない', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['z', 'b']), await storedJson(page, 'bookmarks_groups_order'));
 await tabB.click('#group-filter-btn');
-const orderB = await tabB.$$eval('#group-popover .group-row-name', (els) => els.map((e) => e.textContent));
+const orderB = await tabB.$$eval('#group-popover .filter-row-name', (els) => els.map((e) => e.textContent));
 check('別のタブにも、インポートした並びが出る', JSON.stringify(orderB) === JSON.stringify(['すべて', 'z', 'b']), orderB);
 await tabB.close();
 
@@ -526,6 +531,228 @@ await page.click('#group-filter-btn');
 await page.focus('#search-input');
 await page.keyboard.press('Escape');
 check('パネルが開いているとき、検索欄の Escape はパネルを閉じ、検索は残る', (await page.$eval('#group-popover', (e) => e.hidden)) && (await page.$eval('#search-input', (e) => e.value)) === 'T0');
+
+// ===== タグの手動の並びは持たない(名前順) =====
+const tagTiles = (p) => p.$$eval('#tag-popover [data-filter-key]', (els) => els.map((e) => e.getAttribute('data-filter-key')));
+await open(page, [bm(0, { tags: ['a', 'b'] })]);
+await page.evaluate(() => localStorage.setItem('bookmarks_tag_order', JSON.stringify(['b', 'a'])));
+await page.reload();
+check('旧キー bookmarks_tag_order は起動時に消え、タグは名前順', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_order'))) === null && JSON.stringify(await tagTiles(page)) === JSON.stringify(['a', 'b']), await tagTiles(page));
+await importJson(page, { version: 4, bookmarks: [bm(0, { tags: ['a', 'b'] })], tagOrder: ['b', 'a'] });
+check('tagOrder 入りのファイルをインポートしても、保存されず名前順', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_order'))) === null && JSON.stringify(await tagTiles(page)) === JSON.stringify(['a', 'b']), await tagTiles(page));
+const [dlTag] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
+const exportedTag = JSON.parse(await (await import('node:fs/promises')).readFile(await dlTag.path(), 'utf8'));
+check('エクスポートに tagOrder が無い', !('tagOrder' in exportedTag), Object.keys(exportedTag));
+
+// ===== タグの絞り込みのパネル =====
+const panelRows = (p, id) => p.$$eval('#' + id + ' .filter-row', (els) => els.map((e) => e.querySelector('.filter-row-name').textContent + ':' + e.querySelector('.filter-row-count').textContent));
+const tagBtn = (p) => p.$eval('#tag-filter-btn', (e) => ({ text: e.textContent, title: e.title, active: e.classList.contains('active'), expanded: e.getAttribute('aria-expanded') }));
+const hiddenOf = (p, sel) => p.$eval(sel, (e) => e.hidden);
+await open(page, [bm(0, { tags: ['b'], groupName: 'g1' }), bm(1, { tags: ['a', 'b'] }), bm(2, { groupName: 'g1' })]);
+await page.click('#tag-filter-btn');
+check('タグのボタンでパネルが開く', !(await hiddenOf(page, '#tag-popover')) && (await tagBtn(page)).expanded === 'true');
+check('タグのパネルの行は「すべて」+名前順+「タグなし」で件数付き', JSON.stringify(await panelRows(page, 'tag-popover')) === JSON.stringify(['すべて:3', 'a:1', 'b:2', 'タグなし:1']), await panelRows(page, 'tag-popover'));
+await page.click('#tag-popover [data-filter-key="b"]');
+let tb = await tagBtn(page);
+check('タグを選ぶと絞り込まれ、パネルが閉じ、ボタンが「タグ: b」', JSON.stringify(await titles(page)) === JSON.stringify(['T0', 'T1']) && (await hiddenOf(page, '#tag-popover')) && tb.text === 'タグ: b' && tb.title === 'タグ: b' && tb.active && tb.expanded === 'false', { t: await titles(page), tb });
+await pickTag(page, 'b');
+tb = await tagBtn(page);
+check('同じタグをもう一度選ぶと外れる', (await titles(page)).length === 3 && tb.text === 'タグ' && !tb.active, tb);
+await page.click('#tag-filter-btn');
+await page.click('#tag-popover [data-filter-none]');
+check('「タグなし」を選ぶと、タグが 0 個の行だけ', JSON.stringify(await titles(page)) === JSON.stringify(['T2']) && (await tagBtn(page)).text === 'タグ: タグなし', await titles(page));
+await page.click('#tag-filter-btn');
+await page.click('#tag-popover [data-filter-all]');
+check('「すべて」でタグの絞り込みが外れる', (await titles(page)).length === 3 && !(await tagBtn(page)).active);
+await page.click('#group-filter-btn');
+await page.click('#group-popover [data-filter-key="g1"]');
+await pickTag(page, 'b');
+check('タグとグループの絞り込みは AND', JSON.stringify(await titles(page)) === JSON.stringify(['T0']), await titles(page));
+await page.click('#tag-filter-btn');
+await page.click('#group-filter-btn');
+check('グループのパネルを開くと、タグのパネルは閉じる', (await hiddenOf(page, '#tag-popover')) && !(await hiddenOf(page, '#group-popover')) && (await tagBtn(page)).expanded === 'false');
+await page.click('#tag-filter-btn');
+check('タグのパネルを開くと、グループのパネルは閉じる', !(await hiddenOf(page, '#tag-popover')) && (await hiddenOf(page, '#group-popover')) && (await page.$eval('#group-filter-btn', (e) => e.getAttribute('aria-expanded'))) === 'false');
+await page.keyboard.press('Escape');
+check('Escape でタグのパネルが閉じ、ボタンにフォーカスが戻る', (await hiddenOf(page, '#tag-popover')) && (await page.evaluate(() => document.activeElement.id)) === 'tag-filter-btn');
+await page.click('#tag-filter-btn');
+await page.click('#result-count');
+check('外のクリックでタグのパネルが閉じる', await hiddenOf(page, '#tag-popover'));
+await page.click('#tag-filter-btn');
+await page.focus('#search-input');
+await page.keyboard.press('Escape');
+check('パネルが開いているとき、空の検索欄の Escape は絞り込みを外さず、パネルだけ閉じる', (await hiddenOf(page, '#tag-popover')) && (await tagBtn(page)).text === 'タグ: b' && JSON.stringify(await titles(page)) === JSON.stringify(['T0']), await tagBtn(page));
+check('ヘルプの Esc の説明が「グループ・タグのパネル」', (await page.$eval('#help-panel', (e) => e.textContent)).includes('グループ・タグのパネル'));
+
+// パネルを開くと、フォーカスがパネルの中へ入る(選択中の行、無ければ「すべて」)
+const activeRow = (p) => p.evaluate(() => { var a = document.activeElement; return a ? (a.hasAttribute('data-filter-all') ? 'all' : a.getAttribute('data-filter-key')) : null; });
+await page.click('#filter-clear-btn');
+for (const [kind, btn, pop, key] of [['タグ', '#tag-filter-btn', '#tag-popover', 'b'], ['グループ', '#group-filter-btn', '#group-popover', 'g1']]) {
+  await page.click(btn);
+  check(kind + 'のパネル(絞り込みなし): フォーカスは「すべて」の行', (await activeRow(page)) === 'all', await activeRow(page));
+  await page.click(pop + ' [data-filter-key="' + key + '"]');
+  await page.click(btn);
+  check(kind + 'のパネル(絞り込み中): フォーカスは選択中の行', (await activeRow(page)) === key, await activeRow(page));
+  await page.keyboard.press('Escape');
+  check(kind + 'のパネル: フォーカス中の行から Escape で閉じ、ボタンへ戻る', (await hiddenOf(page, pop)) && (await page.evaluate(() => document.activeElement.id)) === btn.slice(1), await page.evaluate(() => document.activeElement.id));
+  await page.click('#filter-clear-btn');
+}
+
+// 狭い幅(400x740)でも、パネルは画面からはみ出さない
+const vpPrev = page.viewportSize();
+await page.setViewportSize({ width: 400, height: 740 });
+for (const [btn, pop] of [['#tag-filter-btn', '#tag-popover'], ['#group-filter-btn', '#group-popover']]) {
+  await page.click(btn);
+  const r = await page.$eval(pop, (e) => { var b = e.getBoundingClientRect(); return { left: b.left, right: b.right, bottom: b.bottom, vw: window.innerWidth, vh: window.innerHeight }; });
+  check('400px 幅で ' + pop + ' が画面内に収まる', r.left >= 0 && r.right <= r.vw && r.bottom <= r.vh, r);
+  await page.keyboard.press('Escape');
+}
+await page.setViewportSize(vpPrev || { width: 1280, height: 720 });
+
+// 検索ボックスの # 候補で選んでも、ボタンの文字が替わる
+await open(page, [bm(0, { tags: ['alpha'] }), bm(1)]);
+await page.fill('#search-input', '#al');
+await page.click('#tag-search-suggest li[data-tag="alpha"]');
+check('# 候補で選ぶと、ボタンが「タグ: alpha」', (await tagBtn(page)).text === 'タグ: alpha' && JSON.stringify(await titles(page)) === JSON.stringify(['T0']), await tagBtn(page));
+
+// 特殊文字のタグ名でも、行とボタンの title が壊れない
+await open(page, [bm(0, { tags: ['<b>&"'] })]);
+const specialRows = await panelRows(page, 'tag-popover');
+await page.click('#tag-filter-btn');
+await page.locator('#tag-popover .filter-row').nth(1).click();
+tb = await tagBtn(page);
+check('特殊文字のタグ名がパネルの行とボタンにそのまま出る', specialRows[1] === '<b>&":1' && tb.title === 'タグ: <b>&"' && tb.text === 'タグ: <b>&"', { specialRows, tb });
+
+// タグが多いときは、パネルの中でスクロールする
+await open(page, [bm(0, { tags: Array.from({ length: 60 }, (_, i) => 'tag' + i) })]);
+await page.click('#tag-filter-btn');
+const pop = await page.$eval('#tag-popover', (e) => ({ h: e.getBoundingClientRect().height, vh: window.innerHeight, sh: e.scrollHeight, ch: e.clientHeight }));
+check('タグが 60 個でも、パネルは画面に収まりスクロールできる', pop.h <= pop.vh && pop.sh > pop.ch, pop);
+
+// 「グループなし」を選ぶと、グループの無い行だけになり、ボタンが「グループ: グループなし」
+await open(page, [bm(0, { groupName: 'g' }), bm(1)]);
+await page.click('#group-filter-btn');
+await page.click('#group-popover [data-filter-none]');
+check('「グループなし」を選ぶと、グループの無い行だけ', JSON.stringify(await titles(page)) === JSON.stringify(['T1']) && (await page.$eval('#group-filter-btn', (e) => e.textContent)) === 'グループ: グループなし', await titles(page));
+
+// ===== グループの色(タグの色とは別に持つ) =====
+const styleH = (p, sel) => p.$eval(sel, (e) => e.style.getPropertyValue('--h').trim());
+// colors はグループの色の保存値(省略時は消す)。タグの色は消す
+async function openColors(p, data, colors) {
+  await open(p, data);
+  await p.evaluate((c) => {
+    localStorage.removeItem('bookmarks_tag_colors');
+    if (c) localStorage.setItem('bookmarks_group_colors', JSON.stringify(c)); else localStorage.removeItem('bookmarks_group_colors');
+  }, colors);
+  await p.reload();
+}
+async function openGroupManage(p) {
+  await p.click('#tag-manage-open-btn');
+  await p.click('[data-manage-tab="group"]');
+}
+const colorBtn = (key) => '#tag-manage-list .tag-manage-row[data-tag="' + key + '"] .tag-color-btn';
+async function slide(p, hue) {
+  await p.$eval('#tag-manage-list .tag-color-range', (e, h) => {
+    e.value = String(h);
+    e.dispatchEvent(new Event('input', { bubbles: true }));
+    e.dispatchEvent(new Event('change', { bubbles: true }));
+  }, hue);
+}
+
+// (a) グループのタブの色の丸・基本の色・「自動」・スライダー
+await openColors(page, [bm(0, { groupName: 'g' }), bm(1, { groupName: 'h' })]);
+await openGroupManage(page);
+check('グループの行に色の丸がある', (await page.$(colorBtn('g'))) !== null);
+await page.click(colorBtn('g'));
+check('グループの色の丸を押すと、色の選択が開く', (await page.$$('#tag-manage-list .tag-color-swatch')).length === 12);
+await page.click('#tag-manage-list .tag-color-swatch[data-hue="140"]');
+const gc1 = await storedJson(page, 'bookmarks_group_colors');
+check('基本の色を選ぶと、丸の色が変わり、bookmarks_group_colors に保存され、区画も同じ色', (await styleH(page, colorBtn('g'))) === '140' && JSON.stringify(gc1) === JSON.stringify({ g: 140 }) && (await styleH(page, '.tag-group[data-group="g"]')) === '140', gc1);
+await page.click('#tag-manage-list [data-action="auto-tag-color"]');
+check('「自動」で、キーが bookmarks_group_colors から消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({}), await storedJson(page, 'bookmarks_group_colors'));
+await slide(page, 77);
+check('スライダーを離すと、グループの色が保存される', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ g: 77 }) && (await styleH(page, '.tag-group[data-group="g"]')) === '77', await storedJson(page, 'bookmarks_group_colors'));
+
+// (g) 色の選択を開いている間は、その行の draggable が外れる。Escape は色の選択だけを閉じる
+const dragOf = (key) => page.$eval('#tag-manage-list .tag-manage-row[data-tag="' + key + '"]', (e) => e.getAttribute('draggable'));
+check('色の選択を開いている行は draggable が外れる(ほかの行はそのまま)', (await dragOf('g')) === null && (await dragOf('h')) === 'true');
+await page.click(colorBtn('g'));
+check('色の選択を閉じると draggable が戻る', (await dragOf('g')) === 'true' && (await page.$$('#tag-manage-list .tag-color-picker')).length === 0);
+await page.click(colorBtn('g'));
+await page.keyboard.press('Escape');
+check('Escape で色の選択だけが閉じる(モーダルは開いたまま)', (await page.$$('#tag-manage-list .tag-color-picker')).length === 0 && !(await page.$eval('#tag-manage-overlay', (e) => e.hidden)) && (await dragOf('g')) === 'true');
+
+// (b) 同名のタグとグループの色は、互いに影響しない
+await openColors(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
+await page.click('#tag-filter-btn');
+const sameTagHue = await styleH(page, '#tag-popover [data-filter-key="same"]');
+await page.keyboard.press('Escape');
+await openGroupManage(page);
+await page.click(colorBtn('same'));
+await slide(page, 100);
+await page.keyboard.press('Escape');
+await page.keyboard.press('Escape');
+await page.click('#tag-filter-btn');
+check('グループの色を変えても、同名のタグの色は変わらない', (await page.evaluate(() => localStorage.getItem('bookmarks_tag_colors'))) === null && (await styleH(page, '#tag-popover [data-filter-key="same"]')) === sameTagHue, sameTagHue);
+await page.keyboard.press('Escape');
+await page.click('#group-filter-btn');
+check('グループのパネルの色の点は、グループの色', (await styleH(page, '#group-popover [data-filter-key="same"]')) === '100');
+await page.keyboard.press('Escape');
+await page.click('#tag-manage-open-btn');
+await page.click(colorBtn('same'));
+await slide(page, 200);
+check('タグの色を変えても、同名のグループの区画の色は変わらない', (await styleH(page, '.tag-group[data-group="same"]')) === '100' && JSON.stringify(await storedJson(page, 'bookmarks_tag_colors')) === JSON.stringify({ same: 200 }) && JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ same: 100 }));
+
+// (c) 改名で色が新しいキーへ移る。統合では既存の色が残る。削除・最後の 1 件の移動で消える
+async function renameGroupTo(p, key, name) {
+  await p.click('#tag-manage-list [data-action="edit-tag"][data-tag="' + key + '"]');
+  await p.fill('.tag-rename-input', name);
+  await p.click('.tag-rename-form button[type=submit]');
+  await p.click('[data-action="apply-rename"]');
+}
+await openColors(page, [bm(0, { groupName: 'a' }), bm(1, { groupName: 'b' }), bm(2, { groupName: 'c' })], { a: 10, b: 20, c: 30 });
+await openGroupManage(page);
+await renameGroupTo(page, 'c', 'd');
+check('グループの改名で、色が新しいキーへ移る', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10, b: 20, d: 30 }), await storedJson(page, 'bookmarks_group_colors'));
+await renameGroupTo(page, 'd', 'A');
+check('統合では、既存のグループの色が残る', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10, b: 20 }), await storedJson(page, 'bookmarks_group_colors'));
+await page.click('#tag-manage-list [data-action="delete-tag"][data-tag="b"]');
+await page.click('[data-action="confirm-delete-tag"]');
+check('グループの削除で、色が消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10 }), await storedJson(page, 'bookmarks_group_colors'));
+await openColors(page, [bm(0, { groupName: 'a' }), bm(1, { groupName: 'x' })], { a: 10, x: 5 });
+await page.click('.tag-group[data-group="x"] .card--list [data-action="edit"]');
+await page.fill('#edit-group-text', 'a');
+await page.click('[data-edit-form] button[type=submit]');
+check('最後の 1 件が別のグループへ移ると、色が消える', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 10 }), await storedJson(page, 'bookmarks_group_colors'));
+
+// (d) エクスポート・インポート
+await openColors(page, [bm(0, { groupName: 'g' })], { g: 42 });
+const [dlC] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
+const exportedC = JSON.parse(await (await import('node:fs/promises')).readFile(await dlC.path(), 'utf8'));
+check('エクスポートに groupColors が入る', JSON.stringify(exportedC.groupColors) === JSON.stringify({ g: 42 }), exportedC.groupColors);
+await importJson(page, { version: 4, bookmarks: ['a', 'b', 'c', 'd', 'e'].map((g, i) => bm(i, { groupName: g })), groupColors: { a: 400, b: -10, c: 'x', d: null, e: 120 } });
+check('インポートした groupColors は整えて保存される', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ a: 40, b: 350, e: 120 }), await storedJson(page, 'bookmarks_group_colors'));
+await importJson(page, { version: 4, bookmarks: [bm(0, { groupName: 'a' })] });
+check('groupColors の無いファイルをインポートすると、グループの色は空', JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({}), await storedJson(page, 'bookmarks_group_colors'));
+
+// (e) storage イベントで、別のタブのグループの色を取り込む
+await openColors(page, [bm(0, { groupName: 'g' })]);
+await page.evaluate(() => {
+  localStorage.setItem('bookmarks_group_colors', JSON.stringify({ g: 50 }));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'bookmarks_group_colors' }));
+});
+check('storage イベントで、グループの色を取り込む', (await styleH(page, '.tag-group[data-group="g"]')) === '50');
+
+// (f) 特殊文字のグループ名でも、色の丸とパネルの行が壊れない
+await openColors(page, [bm(0, { groupName: '<b>&"' })]);
+await page.click('#group-filter-btn');
+const specialG = await page.$eval('#group-popover [data-filter-key] .filter-row-name', (e) => e.textContent);
+await page.keyboard.press('Escape');
+await openGroupManage(page);
+const specialLabel = await page.$eval('#tag-manage-list .tag-color-btn', (e) => e.getAttribute('aria-label'));
+await page.click('#tag-manage-list .tag-color-btn');
+const specialRange = await page.$eval('#tag-manage-list .tag-color-range', (e) => e.getAttribute('aria-label'));
+check('特殊文字のグループ名で、色の丸・スライダー・パネルの行が壊れない', specialG === '<b>&"' && specialLabel === '<b>&"の色を選ぶ' && specialRange === '<b>&"の色相', { specialG, specialLabel, specialRange });
 
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
