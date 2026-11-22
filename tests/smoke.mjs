@@ -59,13 +59,13 @@ await page.fill('#edit-memo', 'unsaved memo');
 await page.click('.tag-tile[data-tag="t1"]');
 check('編集中のメモが再描画で消えない', (await page.$eval('#edit-memo', (e) => e.value)) === 'unsaved memo');
 
-// 8: 短い英字のタグは、単語として含まれるときだけ付く
+// 自動タグ付けは無い: 既存のタグ名に当たる入力でも、追加フォームのタグは空のまま
 await open(page, [bm(0, { tags: ['ai'] })]);
 await page.click('#toggle-add-btn');
-await page.fill('#new-url', 'https://mail.google.com');
-check('"ai" は mail に付かない', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())) === '');
 await page.fill('#new-url', 'https://ai.example.com');
-check('"ai" は ai.example.com に付く', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())).startsWith('ai'));
+await page.fill('#new-title', 'ai');
+check('追加フォームのタグは自動で選ばれない', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())) === '');
+check('自動タグ付けのボタンもモーダルも無い', (await page.$('#auto-tag-btn')) === null && (await page.$('#auto-tag-overlay')) === null);
 
 // 旧形式(v1.x: group あり・tags なし)の読み込み
 const oldFormat = bm(0, { group: '仕事' });
@@ -127,7 +127,7 @@ for (const [name, text] of [
 
 await freshAddForm(page, [bm(0, { tags: ['ai'] })]);
 await paste(page, 'ai の記事\nhttps://x.example.com/');
-check('貼り付けでタグの事前選択が更新される', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())).startsWith('ai'));
+check('貼り付けでもタグは自動で選ばれない', (await page.$eval('#new-tag-chips', (e) => e.textContent.trim())) === '');
 
 // コピー用ブックマークレットの登録リンク
 await freshAddForm(page);
