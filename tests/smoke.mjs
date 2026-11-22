@@ -276,14 +276,20 @@ await page.evaluate(() => localStorage.setItem('bookmarks_group_order', JSON.str
 await page.reload();
 check('旧キー bookmarks_group_order は削除される', (await page.evaluate(() => localStorage.getItem('bookmarks_group_order'))) === null);
 await add(page, 'G0');
-check('旧データを保存すると、groups は空の配列になる', JSON.stringify((await storedJson(page, 'bookmarks_data')).map((b) => b.groups)) === JSON.stringify([[], [], []]), (await storedJson(page, 'bookmarks_data')).map((b) => b.groups));
+const savedOld = await storedJson(page, 'bookmarks_data');
+check('旧データを保存すると、groupName は空で、groups のキーは無い', JSON.stringify(savedOld.map((b) => b.groupName)) === JSON.stringify(['', '', '']) && savedOld.every((b) => !('groups' in b)), savedOld);
 
-// グループ名は、大文字小文字・前後の空白が違っても 1 つに統合される(インポートの検証を通す)
+// v3 の複数グループは、先頭の空でないものだけが groupName になる。表記は揃う(インポートの検証を通す)
 await open(page, []);
 await importJson(page, { version: 3, bookmarks: [bm(0, { groups: ['Work', ' work ', 5, '', 'Home'] }), bm(1, { groups: ['WORK'] })], groupOrder: ['home', 'work'] });
 const imp = await storedJson(page, 'bookmarks_data');
-check('グループは大文字小文字・空白・非文字列を整え、表記を揃える', JSON.stringify(imp.map((b) => b.groups)) === JSON.stringify([['Work', 'Home'], ['Work']]), imp.map((b) => b.groups));
-check('v3 の groupOrder が保存される', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['home', 'work']));
+check('v3 の groups は先頭だけが groupName になり、表記が揃う', JSON.stringify(imp.map((b) => b.groupName)) === JSON.stringify(['Work', 'Work']) && imp.every((b) => !('groups' in b)), imp);
+check('v3 の groupOrder が保存される(使われなくなった home は外れる)', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['work']), await storedJson(page, 'bookmarks_groups_order'));
+await importJson(page, { version: 3, bookmarks: [bm(0, { groups: ['', ' ', 'B', 'C'] })] });
+check('v3 の groups の先頭の空は飛ばす', (await storedJson(page, 'bookmarks_data'))[0].groupName === 'B', await storedJson(page, 'bookmarks_data'));
+await importJson(page, { version: 4, bookmarks: [bm(0, { groupName: 7 }), bm(1, { groupName: null }), bm(2, { groupName: ['x'] }), bm(3, { groupName: '  ' })] });
+const badG = await storedJson(page, 'bookmarks_data');
+check('v4 の不正な groupName は空になり、ブックマークは残る', badG.length === 4 && badG.every((b) => b.groupName === ''), badG);
 
 // v2 の groupOrder(旧: タグのキー)と、配列だけの旧式は、グループの並びとして読まない
 await importJson(page, { version: 2, bookmarks: [bm(0, { groups: ['a'] })], groupOrder: ['a'] });
@@ -291,11 +297,11 @@ check('v2 の groupOrder は無視される', JSON.stringify(await storedJson(pa
 await importJson(page, [bm(0)]);
 check('配列だけの旧式でも、groupOrder は空', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify([]));
 
-// エクスポートは version 3 で、groups と groupOrder を含む
-await open(page, [bm(0, { groups: ['g1'] })]);
+// エクスポートは version 4 で、groupName と groupOrder を含む(groups は無い)
+await open(page, [bm(0, { groupName: 'g1' })]);
 const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#export-btn')]);
 const exported = JSON.parse(await (await import('node:fs/promises')).readFile(await dl.path(), 'utf8'));
-check('エクスポートは version 3 で groups を含む', exported.version === 3 && exported.bookmarks[0].groups[0] === 'g1' && Array.isArray(exported.groupOrder), exported);
+check('エクスポートは version 4 で groupName を含む', exported.version === 4 && exported.bookmarks[0].groupName === 'g1' && !('groups' in exported.bookmarks[0]) && Array.isArray(exported.groupOrder), exported);
 
 // ===== グループ(区画・絞り込み・パネル) =====
 const sections = () => page.$$eval('.tag-group', (els) => els.map((e) => e.getAttribute('data-group') + ':' + e.querySelectorAll('.card--list').length));
@@ -304,12 +310,21 @@ const sections = () => page.$$eval('.tag-group', (els) => els.map((e) => e.getAt
 await open(page, [bm(0, { tags: ['t'] }), bm(1)]);
 check('旧データは全件が「グループなし」の区画', JSON.stringify(await sections()) === JSON.stringify([':2']), await sections());
 
-// 区画はグループごと。複数のグループに所属すると、それぞれの区画に出る。グループなしは最後
-await open(page, [bm(0, { groups: ['仕事', '資料室'], tags: ['t1'] }), bm(1, { groups: ['仕事'], tags: ['t2'] }), bm(2, { groups: [] })]);
-check('区画はグループごと(複数所属は重複して出る。グループなしは最後)', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
-check('グループなしの区画の見出し', (await page.$$eval('.tag-group-head', (els) => els.map((e) => e.textContent))).pop().startsWith('グループなし'));
+// 区画はグループごと。旧データの複数所属は、先頭のグループの区画だけに出る(重複しない)。グループなしは最後
+await open(page, [bm(0, { groups: ['仕事', '資料室'], tags: ['t1'] }), bm(1, { groupName: '仕事', tags: ['t2'] }), bm(2, { groupName: '' }), bm(3, { groupName: '資料室' })]);
+check('区画はグループごと(先頭のグループだけ。グループなしは最後)', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
+const heads = await page.$$eval('.tag-group-head', (els) => els.map((e) => e.textContent));
+check('区画の見出しに名前と件数', heads[0].indexOf('仕事') !== -1 && heads[0].indexOf('2') !== -1, heads);
+check('グループなしの区画の見出し', heads[heads.length - 1].startsWith('グループなし'), heads);
+check('行は 1 回だけ出る', (await page.$$('.card--list[data-card-id="i0"]')).length === 1);
+
+// HTML の特殊文字を含むグループ名でも、見出しにそのまま出る
+await open(page, [bm(0, { groupName: '<b>&"' })]);
+const specialHead = await page.$eval('.tag-group-head', (e) => e.textContent);
+check('特殊文字のグループ名が見出しにそのまま出る', specialHead.startsWith('<b>&"'), specialHead);
 
 // ヘッダーのパネルで、グループを絞り込む。タグの絞り込みとは AND
+await open(page, [bm(0, { groupName: '仕事', tags: ['t1'] }), bm(1, { groupName: '仕事', tags: ['t2'] }), bm(2, { groupName: '資料室' }), bm(3)]);
 await page.click('#group-filter-btn');
 check('パネルが開く', (await page.$eval('#group-popover', (e) => !e.hidden)) && (await page.$eval('#group-filter-btn', (e) => e.getAttribute('aria-expanded'))) === 'true');
 await page.click('[data-group-filter="資料室"]');
@@ -321,71 +336,102 @@ await page.click('#filter-clear-btn');
 check('解除でグループとタグの両方が外れる', JSON.stringify(await sections()) === JSON.stringify(['仕事:2', '資料室:1', ':1']), await sections());
 
 // 同名のタグとグループは、別の絞り込みとして動く
-await open(page, [bm(0, { groups: ['x'], tags: ['y'] }), bm(1, { groups: ['y'], tags: ['x'] })]);
+await open(page, [bm(0, { groupName: 'x', tags: ['y'] }), bm(1, { groupName: 'y', tags: ['x'] })]);
 await page.click('#group-filter-btn');
 await page.click('[data-group-filter="x"]');
 check('グループ x は、タグ x の行を巻き込まない', (await titles(page)).join() === 'T0', await titles(page));
 
 // 絞り込み中のグループが無くなったら、絞り込みが外れる(画面が空にならない)
-await open(page, [bm(0, { groups: ['solo'] }), bm(1, { groups: ['other'] })]);
+await open(page, [bm(0, { groupName: 'solo' }), bm(1, { groupName: 'other' })]);
 await page.click('#group-filter-btn');
 await page.click('[data-group-filter="solo"]');
 await page.click('.card--list [data-action="delete"]');
 check('絞り込み中のグループが消えたら、残りが出る', (await titles(page)).length === 1, await titles(page));
 
+// 最後の 1 件が別のグループへ移ると、並びから外れ、絞り込みも外れる
+await open(page, [bm(0, { groupName: 'solo' }), bm(1, { groupName: 'other' })]);
+await page.evaluate(() => localStorage.setItem('bookmarks_groups_order', JSON.stringify(['solo', 'other'])));
+await page.reload();
+await page.click('#group-filter-btn');
+await page.click('[data-group-filter="solo"]');
+await page.click('.card--list [data-action="edit"]');
+await page.fill('#edit-group-text', 'other');
+await page.click('[data-edit-form] button[type=submit]');
+check('移ったグループは並びから外れる', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['other']), await storedJson(page, 'bookmarks_groups_order'));
+check('移ったあと、絞り込みが外れる', JSON.stringify(await sections()) === JSON.stringify(['other:2']), await sections());
+
 // 検索の対象にグループ名を含める。0 件の区画は見出しごと隠す
-await open(page, [bm(0, { groups: ['営業部'] }), bm(1, { groups: ['開発部'] })]);
+await open(page, [bm(0, { groupName: '営業部' }), bm(1, { groupName: '開発部' })]);
 await page.fill('#search-input', '営業');
 check('グループ名で検索できる', JSON.stringify(await sections()) === JSON.stringify(['営業部:1']), await sections());
 
 // Escape: パネルが開いているとき、Escape はパネルを閉じる
-await open(page, [bm(0, { groups: ['g'] })]);
+await open(page, [bm(0, { groupName: 'g' })]);
 await page.click('#group-filter-btn');
 await page.keyboard.press('Escape');
 check('Escape でパネルが閉じる', await page.$eval('#group-popover', (e) => e.hidden));
 
+// storage イベント: 別のタブが書いた旧形式(groups)も、移行を通して取り込む
+await open(page, []);
+await page.evaluate(() => {
+  localStorage.setItem('bookmarks_data', JSON.stringify([{ id: 's0', url: 'https://s.example.com', title: 'S', tags: [], groups: ['a', 'b'], order: 0 }]));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'bookmarks_data' }));
+});
+check('storage イベントの取り込みでも、区画は先頭のグループだけ', JSON.stringify(await sections()) === JSON.stringify(['a:1']), await sections());
+await add(page, 'S2');
+const afterStorage = await storedJson(page, 'bookmarks_data');
+check('storage イベントの取り込み後の保存に groups は無い', afterStorage.every((b) => !('groups' in b)) && afterStorage[0].groupName === 'a', afterStorage);
+
 // ===== グループ(追加・編集フォーム、詳細パネル) =====
-// 追加フォーム: グループを入れて保存できる(Enter で確定。タグの自動選択はグループには働かない)
-await open(page, [bm(0, { groups: ['既存'], tags: ['ai'] })]);
+// 追加フォーム: グループは 1 行の入力。自動では入らない
+await open(page, [bm(0, { groupName: '既存', tags: ['ai'] })]);
 await page.click('#toggle-add-btn');
 await page.fill('#new-url', 'https://ai.example.com');
-check('追加フォームのグループは自動選択されない', (await page.$eval('#new-group-chips', (e) => e.textContent.trim())) === '');
+check('追加フォームのグループは自動で入らない', (await page.$eval('#new-group-text', (e) => e.value)) === '');
+check('グループのチップ・候補の欄は無い', (await page.$('#new-group-chips')) === null && (await page.$('#new-group-suggest')) === null);
+const groupOptions = await page.$$eval('#group-options option', (els) => els.map((e) => e.value));
+check('グループの候補(datalist)に既存のグループが出る', JSON.stringify(groupOptions) === JSON.stringify(['既存']), groupOptions);
 await page.fill('#new-title', 'G1');
 await page.fill('#new-group-text', '新規グループ');
-await page.press('#new-group-text', 'Enter');
 await page.click('#add-form button[type=submit]');
-const savedG = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data')).find((b) => b.title === 'G1').groups);
-check('追加フォームで付けたグループが保存される', JSON.stringify(savedG) === JSON.stringify(['新規グループ']), savedG);
+const savedG = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data')).find((b) => b.title === 'G1').groupName);
+check('追加フォームで入れたグループが保存される', savedG === '新規グループ', savedG);
+check('保存後、グループの入力欄は空に戻る', (await page.$eval('#new-group-text', (e) => e.value)) === '');
 
 // 既存のグループは、入力すると表記が揃う(大文字小文字違いでも)
-await open(page, [bm(0, { groups: ['Work'] })]);
+await open(page, [bm(0, { groupName: 'Work' })]);
 await page.click('#toggle-add-btn');
 await page.fill('#new-url', 'https://x.example.com');
 await page.fill('#new-title', 'G2');
 await page.fill('#new-group-text', 'work');
-await page.press('#new-group-text', 'Enter');
-check('既存のグループの表記に揃う', (await page.$eval('#new-group-chips', (e) => e.textContent.trim())).startsWith('Work'));
+await page.click('#add-form button[type=submit]');
+const savedG2 = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data')).find((b) => b.title === 'G2').groupName);
+check('既存のグループの表記に揃う', savedG2 === 'Work', savedG2);
 
-// 編集フォーム: グループの入力中の内容が、再描画(タグの絞り込み)で消えない。保存で反映される
-await open(page, [bm(0, { groups: ['g1'], tags: ['t1'] })]);
+// 編集フォーム: グループの入力中の内容が、再描画(検索)で消えない。保存で反映される。空にもできる
+await open(page, [bm(0, { groupName: 'g1', tags: ['t1'] })]);
 await page.click('.card--list [data-action="edit"]');
+check('編集フォームに今のグループが入る', (await page.$eval('#edit-group-text', (e) => e.value)) === 'g1');
 await page.fill('#edit-group-text', 'g2');
-await page.press('#edit-group-text', 'Enter');
-await page.click('.tag-tile[data-tag="t1"]');
-check('編集中のグループが再描画で消えない', (await page.$eval('#edit-group-chips', (e) => e.textContent)).includes('g2'));
+await page.fill('#search-input', 'T');
+check('編集中のグループが再描画で消えない', (await page.$eval('#edit-group-text', (e) => e.value)) === 'g2');
 await page.click('[data-edit-form] button[type=submit]');
-const editedG = await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data'))[0].groups);
-check('編集で付けたグループが保存される', JSON.stringify(editedG) === JSON.stringify(['g1', 'g2']), editedG);
+check('編集で変えたグループが保存される', (await storedJson(page, 'bookmarks_data'))[0].groupName === 'g2');
+await page.click('.card--list [data-action="edit"]');
+await page.fill('#edit-group-text', '');
+await page.click('[data-edit-form] button[type=submit]');
+check('編集でグループを空にできる', (await storedJson(page, 'bookmarks_data'))[0].groupName === '');
 
 // 詳細パネルに「グループ」の項目が出る(グループが無いときは出さない)
-await open(page, [bm(0, { groups: ['仕事', '資料室'] }), bm(1)]);
+await open(page, [bm(0, { groupName: '仕事' }), bm(1)]);
 await page.click('.tag-group[data-group="仕事"] .card--list', { position: { x: 6, y: 6 } });
-check('詳細にグループが出る', (await page.$eval('#detail', (e) => e.textContent)).includes('仕事 / 資料室'));
+const detG = await page.$eval('#detail', (e) => e.textContent);
+check('詳細にグループが出る', detG.includes('グループ仕事'), detG);
 await page.click('.tag-group[data-group=""] .card--list', { position: { x: 6, y: 6 } });
 check('グループが無いブックマークの詳細には、グループの項目が出ない', !(await page.$eval('#detail', (e) => e.textContent)).includes('グループ'));
 
 // ===== グループ(管理: 改名・統合・削除・並べ替え) =====
-const mdata = [bm(0, { groups: ['a'], tags: ['x'] }), bm(1, { groups: ['b'] }), bm(2, { groups: ['a', 'c'] })];
+const mdata = [bm(0, { groupName: 'a', tags: ['x'] }), bm(1, { groupName: 'b' }), bm(2, { groupName: 'c' })];
 await open(page, mdata);
 check('管理ボタンの名前', (await page.$eval('#tag-manage-open-btn', (e) => e.textContent.trim())) === '管理');
 await page.click('#tag-manage-open-btn');
@@ -412,19 +458,28 @@ await tabM.close();
 await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="c"]');
 await page.fill('.tag-rename-input', 'A');
 await page.click('.tag-rename-form button[type=submit]');
+const confirmText = await page.$eval('#tag-manage-list', (e) => e.textContent);
+check('改名の確認に、影響するブックマークが出る', confirmText.includes('T2'), confirmText);
 await page.click('[data-action="apply-rename"]');
 const afterRename = await storedJson(page, 'bookmarks_data');
-check('改名で統合され、表記は既存に揃う', JSON.stringify(afterRename[2].groups) === JSON.stringify(['a']), afterRename[2].groups);
+check('改名で統合され、表記は既存に揃う', afterRename[2].groupName === 'a', afterRename[2]);
 check('同名のタグは変わらない', JSON.stringify(afterRename[0].tags) === JSON.stringify(['x']));
 
+// 改名(統合でない): 新しい名前になる
+await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="b"]');
+await page.fill('.tag-rename-input', 'B2');
+await page.click('.tag-rename-form button[type=submit]');
+await page.click('[data-action="apply-rename"]');
+check('改名で新しい名前になる', (await storedJson(page, 'bookmarks_data'))[1].groupName === 'B2');
+
 // 削除: グループだけ外れ、ブックマークは残る
-await page.click('#tag-manage-list [data-action="delete-tag"][data-tag="b"]');
+await page.click('#tag-manage-list [data-action="delete-tag"][data-tag="b2"]');
 await page.click('[data-action="confirm-delete-tag"]');
 const afterDelete = await storedJson(page, 'bookmarks_data');
-check('グループの削除はブックマークを残す', afterDelete.length === 3 && afterDelete[1].groups.length === 0);
+check('グループの削除はブックマークを残す', afterDelete.length === 3 && afterDelete[1].groupName === '', afterDelete);
 
 // 絞り込み中のグループを改名すると、絞り込みが新しい名前へ引き継がれる
-await open(page, [bm(0, { groups: ['old'] })]);
+await open(page, [bm(0, { groupName: 'old' })]);
 await page.click('#group-filter-btn');
 await page.click('[data-group-filter="old"]');
 await page.click('#tag-manage-open-btn');
@@ -437,7 +492,7 @@ await page.keyboard.press('Escape');
 check('絞り込みが新しい名前へ引き継がれる', (await page.$$eval('.tag-group', (e) => e.map((x) => x.getAttribute('data-group')))).join() === 'new');
 
 // 同名のタグとグループ: タグの改名は、グループの絞り込み・並びに影響しない
-await open(page, [bm(0, { groups: ['same'], tags: ['same'] })]);
+await open(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
 await page.click('#group-filter-btn');
 await page.click('[data-group-filter="same"]');
 await page.click('#tag-manage-open-btn');
@@ -447,16 +502,16 @@ await page.click('.tag-rename-form button[type=submit]');
 await page.click('[data-action="apply-rename"]');
 await page.keyboard.press('Escape');
 const sameState = await page.evaluate(() => ({ data: JSON.parse(localStorage.getItem('bookmarks_data'))[0], sections: Array.prototype.map.call(document.querySelectorAll('.tag-group'), (e) => e.getAttribute('data-group')) }));
-check('タグを改名しても、同名のグループと絞り込みは変わらない', sameState.data.groups[0] === 'same' && sameState.data.tags[0] === 'renamed' && sameState.sections.join() === 'same', sameState);
+check('タグを改名しても、同名のグループと絞り込みは変わらない', sameState.data.groupName === 'same' && sameState.data.tags[0] === 'renamed' && sameState.sections.join() === 'same', sameState);
 
 // ===== 最終レビューの指摘 =====
 // 2 つのタブ: 片方でインポートした groupOrder が、もう片方の再描画(storage イベント)で消えない
-await open(page, [bm(0, { groups: ['c', 'a'] })]);
+await open(page, [bm(0, { groupName: 'c' }), bm(1, { groupName: 'a' })]);
 await page.evaluate(() => localStorage.setItem('bookmarks_groups_order', JSON.stringify(['c', 'a']))); // 別のタブが、古い並びを持っている状態にする
 await page.reload();
 const tabB = await ctx.newPage();
 await open(tabB, undefined);
-await importJson(page, { version: 3, bookmarks: [bm(0, { groups: ['z'] }), bm(1, { groups: ['b'] })], groupOrder: ['z', 'b'] });
+await importJson(page, { version: 4, bookmarks: [bm(0, { groupName: 'z' }), bm(1, { groupName: 'b' })], groupOrder: ['z', 'b'] });
 await tabB.waitForTimeout(500);
 check('インポートした groupOrder が、別のタブの再描画で消えない', JSON.stringify(await storedJson(page, 'bookmarks_groups_order')) === JSON.stringify(['z', 'b']), await storedJson(page, 'bookmarks_groups_order'));
 await tabB.click('#group-filter-btn');
@@ -465,7 +520,7 @@ check('別のタブにも、インポートした並びが出る', JSON.stringif
 await tabB.close();
 
 // グループのパネルが開いているとき、検索欄の Escape は、検索ではなくパネルを閉じる
-await open(page, [bm(0, { groups: ['g'] })]);
+await open(page, [bm(0, { groupName: 'g' })]);
 await page.fill('#search-input', 'T0');
 await page.click('#group-filter-btn');
 await page.focus('#search-input');
