@@ -1200,7 +1200,7 @@
   }
 
   // タグごとの色(タグのキー → 色相 0〜359)。選んでいない(自動。タグ名から決める)タグは持たない。
-  // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneTagOrder() が外す
+  // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneUnusedKeys() が外す
   var TAG_COLOR_KEY = 'bookmarks_tag_colors';
   var TAG_COLOR_PRESETS = [0, 25, 45, 75, 140, 165, 190, 215, 245, 275, 305, 335]; // タグ管理で選べる基本の色(色相)
   function sanitizeColors(raw) {
@@ -1466,12 +1466,12 @@
     });
   }
 
-  // 別のタブが保存した変更を取り込んだ再描画の間は true。そのあいだ pruneTagOrder() は、メモリ上でだけ整え、保存しない。
+  // 別のタブが保存した変更を取り込んだ再描画の間は true。そのあいだ pruneUnusedKeys() は、メモリ上でだけ整え、保存しない。
   // 保存すると、取り込み途中の古い並び・色が、別のタブが先に書いた新しい並びを上書きして消す(データ→並びの順に届くため)
   var syncingFromStorage = false;
 
   // 使われなくなったタグ・グループ(削除・編集などで消えたもの)を色・グループの並びから外す。変わったときだけ保存する
-  function pruneTagOrder() {
+  function pruneUnusedKeys() {
     var used = Object.create(null);
     bookmarks.forEach(function (b) { b.tags.forEach(function (t) { used[tagKey(t)] = true; }); });
     Object.keys(tagColors).forEach(function (k) {
@@ -1587,7 +1587,7 @@
   /* ---------- レンダリング ---------- */
 
   function render() {
-    pruneTagOrder();
+    pruneUnusedKeys();
     // 絞り込み中のタグが無くなった(改名・削除・統合・編集で消えた)ら、絞り込みを外す
     if (state.filterTag !== null && !getTags().some(function (t) { return t.key === state.filterTag; })) state.filterTag = null;
     if (state.filterUntagged && countUntagged() === 0) state.filterUntagged = false;
