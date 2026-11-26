@@ -774,6 +774,40 @@
   /* チップと操作アイコンは、同じ行に収まるときだけ並ぶ。チップの欄が狭くなる(200px 未満)ときは、チップがカードの全幅の行になり、操作アイコンは次の行の右端に回る */
   .card--list .row-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: auto; }
   .card--list .card-footer { margin-top: 0; margin-left: auto; flex: 0 0 auto; }
+
+  /* リスト表示(#bookmark-list.list-mode): 1件が1行。カードのマークアップは同じで、並び方だけ替える。
+     .row-top・.row-foot は display: contents にして、グリップ・アイコン・タイトル・メモ・タグ・操作を、行(グリッド)の直接の子として並べる。
+     区画の幅(コンテナ)で形が変わる: 広いときは1行、780px 以下はタイトルの下にメモを置く2段、460px 以下は、メモ・タグを下の段に回す。
+     タグは折り返しを許したまま、collapseRowTags() が1行に絞って「+N」を出す */
+  #bookmark-list.list-mode .tag-group { grid-template-columns: 1fr; gap: 6px; margin-bottom: 28px; container-type: inline-size; }
+  #bookmark-list.list-mode .card--list {
+    display: grid; grid-template-columns: auto auto minmax(0, 200px) minmax(0, 1fr) minmax(0, 240px) auto;
+    align-items: center; column-gap: 14px; min-height: 0; padding: 8px 14px; border-radius: 16px;
+  }
+  #bookmark-list.list-mode .row-pin { display: none; }
+  #bookmark-list.list-mode .row-top, #bookmark-list.list-mode .row-foot { display: contents; }
+  #bookmark-list.list-mode .row-grip { grid-column: 1; }
+  #bookmark-list.list-mode .seal { grid-column: 2; width: 32px; height: 32px; border-radius: 10px; }
+  #bookmark-list.list-mode .seal img, #bookmark-list.list-mode .seal svg { width: 18px; height: 18px; }
+  #bookmark-list.list-mode .card--list .card-title { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bookmark-list.list-mode .row-memo-preview { grid-column: 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bookmark-list.list-mode .row-tags { grid-column: 5; min-width: 0; }
+  #bookmark-list.list-mode .card--list .card-footer { grid-column: 6; margin-left: 0; }
+  @container (max-width: 780px) {
+    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 200px) auto; row-gap: 2px; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 3; }
+    #bookmark-list.list-mode .card--list .card-title { grid-column: 3; grid-row: 1; }
+    #bookmark-list.list-mode .row-memo-preview { grid-column: 3; grid-row: 2; }
+    #bookmark-list.list-mode .row-tags { grid-column: 4; grid-row: 1 / 3; }
+    #bookmark-list.list-mode .card--list .card-footer { grid-column: 5; grid-row: 1 / 3; }
+  }
+  @container (max-width: 460px) {
+    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 4; }
+    #bookmark-list.list-mode .card--list .card-footer { grid-column: 4; grid-row: 1; }
+    #bookmark-list.list-mode .row-memo-preview { grid-column: 3 / 5; grid-row: 2; }
+    #bookmark-list.list-mode .row-tags { grid-column: 3 / 5; grid-row: 3; }
+  }
   .row-grip { color: var(--ink-soft); opacity: 0.45; font-size: 0.85rem; cursor: grab; flex: 0 0 auto; }
 
   .row-memo-preview {
@@ -2517,7 +2551,7 @@
       getDragged: function () { return draggedGroup === group ? draggedCardId : null; },
       setDragged: function (v) { draggedCardId = v; draggedGroup = v ? group : null; },
       dropEffect: 'move',
-      horizontal: true, // 区画はグリッドなので、カードの左半分に落とすと前、右半分で後ろ
+      get horizontal() { return layout === 'tile'; }, // タイルはグリッドなので、カードの左半分に落とすと前、右半分で後ろ。リストは1列なので、上半分で前、下半分で後ろ
       onDrop: function (draggedId, targetId, after) { moveBookmark(draggedId, targetId, after); }
     });
   }
@@ -2588,6 +2622,7 @@
   }
 
   var MAX_TAG_ROWS = 3; // カードのタグのチップを出す行数の上限。超えるぶんは「+N」にまとめる
+  function maxTagRows() { return layout === 'list' ? 1 : MAX_TAG_ROWS; } // リストは1行
 
   // root の中の各カードで、タグのチップが MAX_TAG_ROWS 行を超えるとき、後ろのチップを隠して「+N」(ホバーで名前)を足す。何度呼んでも同じ結果になる。
   function collapseRowTags(root) {
@@ -2604,13 +2639,13 @@
         });
         return tops.length;
       }
-      if (rowCount() <= MAX_TAG_ROWS) return;
+      if (rowCount() <= maxTagRows()) return;
       more = document.createElement('span');
       more.className = 'row-tag-more';
       more.textContent = '+0';
       box.appendChild(more);
       var hidden = 0;
-      for (var i = tags.length - 1; i > 0 && rowCount() > MAX_TAG_ROWS; i--) {
+      for (var i = tags.length - 1; i > 0 && rowCount() > maxTagRows(); i--) {
         tags[i].hidden = true;
         hidden++;
         more.textContent = '+' + hidden;

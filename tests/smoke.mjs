@@ -824,6 +824,76 @@ check('編集フォームを開いたまま切り替えても入力が残り、�
   await p3.close();
 }
 
+// ===== リスト表示の見た目・タグの「+N」・ドラッグ =====
+const manyTags = Array.from({ length: 12 }, (_, i) => 'タグ名その' + i);
+const listData = [
+  bm(0, { groupName: 'g1', title: 'L'.repeat(80), memo: 'M'.repeat(200), tags: manyTags }),
+  bm(1, { groupName: 'g1', title: 'T1' }),
+  bm(2, { groupName: 'g1', title: 'T2' }),
+  bm(3, { groupName: 'g2', title: 'T3' })
+];
+await open(page, listData);
+const colCount = () => page.$eval('.tag-group', (e) => getComputedStyle(e).gridTemplateColumns.split(' ').length);
+check('タイルは、区画が複数列', (await colCount()) >= 2, await colCount());
+await page.click('#layout-list-btn');
+check('リストは、区画が1列', (await colCount()) === 1, await colCount());
+const longH = await page.$eval('.card--list', (e) => Math.round(e.getBoundingClientRect().height));
+check('リストは、長いタイトル・メモ・多数のタグの行も 80px 以下', longH <= 80, longH);
+const tagRows = await page.$eval('.card--list .row-tags', (box) => {
+  const vis = [...box.querySelectorAll('.row-tag')].filter((t) => !t.hidden);
+  const more = box.querySelector('.row-tag-more');
+  const hiddenN = box.querySelectorAll('.row-tag[hidden]').length;
+  return { tops: [...new Set(vis.concat(more ? [more] : []).map((e) => e.offsetTop))].length, more: more ? more.textContent : null, hiddenN };
+});
+check('リストのタグは1行で、溢れは +N', tagRows.tops === 1 && tagRows.hiddenN > 0 && tagRows.more === '+' + tagRows.hiddenN, tagRows);
+const noOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+check('リストでもページが横にはみ出さない(1280px)', await noOverflow());
+const rowH = (i) => page.$$eval('.card--list', (els, k) => Math.round(els[k].getBoundingClientRect().height), i);
+const h1280 = await rowH(1);
+check('リスト(幅 1280px。区画の幅 780px 以下)は、メモがタイトルの下の2段で、80px 以下', h1280 > 48 && h1280 <= 80, h1280);
+check('リスト(幅 1280px)でも、メモが見える(幅がある)', await page.$eval('.card--list .row-memo-preview', (e) => e.getBoundingClientRect().width > 100));
+await page.setViewportSize({ width: 600, height: 800 });
+check('リストは幅 600px でも横にはみ出さない', await noOverflow());
+await page.setViewportSize({ width: 400, height: 800 });
+check('リストは幅 400px でも横にはみ出さず、行がさらに高くなる(3段)', (await noOverflow()) && (await rowH(1)) > h1280, { h1280, h400: await rowH(1) });
+await page.setViewportSize({ width: 1900, height: 900 });
+const wide = await page.$eval('.card--list', (c) => {
+  const r = (sel) => c.querySelector(sel).getBoundingClientRect();
+  return { h: Math.round(c.getBoundingClientRect().height), sameLine: Math.abs(r('.card-title').top - r('.row-memo-preview').top) < 8 };
+});
+check('リストは、広いと1行(タイトルとメモが同じ行で、48px 以下)', wide.h <= 56 && wide.sameLine, wide);
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.click('#layout-tile-btn');
+const tileTagInfo = await page.$eval('.card--list .row-tags', (box) => ({ hidden: box.querySelectorAll('.row-tag[hidden]').length }));
+check('タイルに戻すと、タグは3行基準に戻る', tileTagInfo.hidden < tagRows.hiddenN, { tileTagInfo, tagRows });
+await page.click('#layout-list-btn');
+await page.fill('#search-input', 'T');
+check('検索中のリストは、グリップが出ず、横にはみ出さない', (await page.$$('.row-grip')).length === 0 && (await noOverflow()));
+await page.fill('#search-input', '');
+await page.press('#search-input', 'Escape');
+// ドラッグ(同じ区画 g1 の中): T1 を T2 の下半分へ → L..., T2, T1
+// locator.dragTo は、同じページで続けて使うと、2回目以降に別の行を掴むことがある。マウスを直接動かす
+const dragCard = async (srcTitle, dstTitle, yRatio, xRatio) => {
+  const sb = await page.locator('.card--list', { hasText: srcTitle }).first().boundingBox();
+  const db = await page.locator('.card--list', { hasText: dstTitle }).first().boundingBox();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2 + 5, { steps: 3 });
+  await page.mouse.move(db.x + db.width * xRatio, db.y + db.height * yRatio, { steps: 10 });
+  await page.mouse.up();
+};
+await dragCard('T1', 'T2', 0.75, 0.5);
+const orderAfter = async () => (await titles(page)).map((t) => (t.length > 10 ? 'L' : t));
+check('リストで、下半分に落とすと直後に入り、順が保存される', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T2', 'T1', 'T3']) && JSON.stringify((await storedJson(page, 'bookmarks_data')).map((b) => b.title.length > 10 ? 'L' : b.title)) === JSON.stringify(['L', 'T2', 'T1', 'T3']), { ui: await orderAfter() });
+await dragCard('T1', 'T2', 0.25, 0.5);
+check('リストで、上半分に落とすと直前に入る', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T1', 'T2', 'T3']), await orderAfter());
+await page.click('#layout-tile-btn');
+// タイルは幅 1280px で 2 列(L と T1 が 1 行目)。画面内の L と T1 で、左右の判定を確かめる
+await dragCard('T1', 'LLLLL', 0.5, 0.2);
+check('タイルは、左半分に落とすと直前に入る(左右で判定)', JSON.stringify(await orderAfter()) === JSON.stringify(['T1', 'L', 'T2', 'T3']), await orderAfter());
+await dragCard('T1', 'LLLLL', 0.5, 0.8);
+check('タイルは、右半分に落とすと直後に入る(左右で判定)', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T1', 'T2', 'T3']), await orderAfter());
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
