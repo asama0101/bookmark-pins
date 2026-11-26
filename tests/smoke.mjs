@@ -1025,6 +1025,78 @@ await toggleId(page, 'i1');
 await page.click('#bulk-apply');
 check('グループ名の表記は、既存に合わせる', JSON.stringify((await bulkStored(page)).map((b) => b.groupName)) === JSON.stringify(['Work', 'Work', 'Work']), (await bulkStored(page)).map((b) => b.groupName));
 
+// ----- 新しく作って付ける・区切り文字の検査・編集下書きの同期 -----
+const newName = async (p, name) => { await p.fill('#bulk-new-input', name); await p.click('#bulk-new-btn'); };
+await open(page, bulkData());
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+check('新しく作って付ける(タグ): 見出しに(新規)、オンの件は0', (await page.$eval('#bulk-title', (e) => e.textContent)).includes('(新規)') && (await checkedIds(page)).length === 0);
+await toggleId(page, 'i2'); await toggleId(page, 'i3');
+check('新規の要約は「(新規) 「…」を N 件に付けます」', (await page.$eval('#bulk-summary', (e) => e.textContent)) === '(新規) 「新規タグ」を 2 件に付けます', await page.$eval('#bulk-summary', (e) => e.textContent));
+await page.click('#bulk-apply');
+{
+  const d = await bulkStored(page);
+  check('新規のタグが、選んだ件に付き、色は自動のまま、管理に行が出る', tagsOf(d, 'i2') === '["新規タグ"]' && tagsOf(d, 'i3') === '["新規タグ"]' && tagsOf(d, 'i0') === '["仕事"]' && ['null', '{}'].includes(JSON.stringify(await page.evaluate(() => localStorage.getItem('bookmarks_tag_colors')) === null ? null : await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_tag_colors'))))) && (await page.$$('#tag-manage-list li.tag-manage-row[data-tag="新規タグ"]')).length === 1, d);
+}
+await open(page, [bm(0, { tags: ['Work'] }), bm(1)]);
+await openManage(page, 'tag');
+await newName(page, 'work');
+check('既存と比較で同じ名前は、既存の付け外しを開く(新規でない)', (await page.$eval('#bulk-title', (e) => e.textContent)).includes('Work') && !(await page.$eval('#bulk-title', (e) => e.textContent)).includes('(新規)') && JSON.stringify(await checkedIds(page)) === JSON.stringify(['i0']), await page.$eval('#bulk-title', (e) => e.textContent));
+await page.click('#bulk-cancel');
+for (const bad of ['a,b', 'a，b', 'a、b', '', '   ']) {
+  await newName(page, bad);
+  check('新しいタグ名の拒否: ' + JSON.stringify(bad), (await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#bulk-new-error', (e) => e.textContent.trim().length > 0)), bad);
+}
+await newName(page, 'ok');
+check('正しい名前を入れ直すと、エラーが消えて開く', !(await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#bulk-new-error', (e) => e.textContent.trim())) === '');
+await page.click('#bulk-cancel');
+await open(page, [bm(0, { tags: ['x,y'] }), bm(1)]);
+await openManage(page, 'tag');
+await bulkOpen(page, 'x,y');
+await toggleId(page, 'i1');
+await page.click('#bulk-apply');
+check('区切り文字を含む既存のタグは、付け外しできる', tagsOf(await bulkStored(page), 'i1') === '["x,y"]', await bulkStored(page));
+await open(page, groupData());
+await openManage(page, 'group');
+await newName(page, 'a,b');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+check('カンマを含む新しいグループ名は受け付ける', groupOf(await bulkStored(page), 'i0') === 'a,b', (await bulkStored(page)).map((b) => b.groupName));
+// 編集中の下書き
+await open(page, bulkData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-memo', 'draft');
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('編集中の件を変更すると、フォームのタグが新しくなり、入力中のメモは残る', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('新規タグ') && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft', await page.$eval('#edit-tag-chips', (e) => e.textContent));
+await page.click('[data-edit-form] button[type=submit]');
+{
+  const d = await bulkStored(page);
+  check('あとで保存しても、まとめての変更は消えず、メモも保存される', tagsOf(d, 'i0').includes('新規タグ') && tagsOf(d, 'i0').includes('仕事') && d.find((b) => b.id === 'i0').memo === 'draft', d.find((b) => b.id === 'i0'));
+}
+await open(page, groupData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-memo', 'draft2');
+await openManage(page, 'group');
+await newName(page, '新規グループ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('グループも、編集フォームの下書きに反映され、メモは残る', (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === '新規グループ' && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft2');
+await page.click('[data-edit-form] button[type=submit]');
+check('保存後も、グループの変更が残る', groupOf(await bulkStored(page), 'i0') === '新規グループ');
+await open(page, bulkData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('下書きが無い(開いただけ)でも、フォームが新しい値で描かれる', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('新規タグ'));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

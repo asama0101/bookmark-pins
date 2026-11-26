@@ -578,6 +578,11 @@
   .bulk-mark.del { color: #a14a4a; }
   .bulk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .bulk-summary { flex: 1 1 auto; font-size: 0.85rem; color: var(--ink-soft); }
+  .bulk-new { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bulk-new[hidden] { display: none; }
+  .bulk-new input { flex: 1 1 160px; min-width: 0; border: 1px solid rgba(40, 60, 90, 0.18); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 0.9rem; background: var(--card); color: var(--ink); }
+  .bulk-error { margin: 0; font-size: 0.85rem; color: #a14a4a; }
+  .bulk-error:empty { display: none; }
   .bulk-result { margin: 0; font-size: 0.85rem; color: #2f7a55; }
   .bulk-result:empty { display: none; }
   .tag-manage-row { flex-wrap: wrap; }
@@ -1143,6 +1148,11 @@
       <button type="button" role="tab" data-manage-tab="group" aria-selected="true">グループ</button>
       <button type="button" role="tab" data-manage-tab="tag" aria-selected="false">タグ</button>
     </div>
+    <div class="bulk-new" id="bulk-new">
+      <input type="text" id="bulk-new-input" placeholder="新しい名前を入力..." aria-label="新しい名前" autocomplete="off">
+      <button type="button" class="btn-quiet" id="bulk-new-btn">新しく作って付ける</button>
+    </div>
+    <p class="bulk-error" id="bulk-new-error" role="alert"></p>
     <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
     <p class="tag-manage-empty" id="tag-manage-empty" hidden>タグがありません。ブックマークにタグを付けると、ここに表示されます。</p>
@@ -1713,8 +1723,22 @@
       if (isGroup) byId[id].groupName = '';
       else byId[id].tags = byId[id].tags.filter(function (t) { return tagKey(t) !== tagKey(plan.name); });
     });
+    // 編集フォームを開いている件に変更が入るときは、入力中の下書きも同じ変更にする(あとで保存しても、上書きされない)。入力中のほかの項目は残す
+    var draft = state.editDraft;
+    if (draft && byId[draft.id] && (plan.add.indexOf(draft.id) !== -1 || plan.remove.indexOf(draft.id) !== -1)) {
+      draft.tags = byId[draft.id].tags.slice();
+      draft.groupName = byId[draft.id].groupName;
+    }
     saveData(bookmarks);
     render();
+  }
+
+  // 新しく入力したタグ名の検査(既存に無い名前にだけ使う)。使えれば null、使えなければ文言。
+  // 区切り文字は、編集フォームのタグ入力で名前が分かれる文字なので、新しい名前には使えない
+  function validateNewTagName(name) {
+    if (!name.trim()) return '名前を入力してください';
+    if (/[,，、]/.test(name)) return '区切り文字(,，、)は、タグの名前に使えません';
+    return null;
   }
 
   // 計画の説明文。変わる件が無ければ ''。past が真なら、適用したあとの言い方
@@ -2288,6 +2312,9 @@
   /* ---------- 「付け外し」のチェックリスト(管理モーダル) ---------- */
 
   var bulkResult = document.getElementById('bulk-result');
+  var bulkNew = document.getElementById('bulk-new');
+  var bulkNewInput = document.getElementById('bulk-new-input');
+  var bulkNewError = document.getElementById('bulk-new-error');
   var bulkPicker = document.getElementById('bulk-picker');
   var bulkSearch = document.getElementById('bulk-search');
   var bulkList = document.getElementById('bulk-list');
@@ -2343,11 +2370,12 @@
     var open = state.bulk !== null;
     bulkPicker.hidden = !open;
     bulkResult.hidden = open;
+    bulkNew.hidden = open;
     document.getElementById('tag-manage-hint').hidden = open;
     tagManageList.hidden = open;
     if (!open) { bulkList.removeAttribute('data-for'); return; }
     tagManageEmpty.hidden = true;
-    document.getElementById('bulk-title').textContent = (state.bulk.kind === 'group' ? 'グループ' : 'タグ') + '「' + state.bulk.name + '」を付ける対象';
+    document.getElementById('bulk-title').textContent = (state.bulk.kind === 'group' ? 'グループ' : 'タグ') + '「' + state.bulk.name + '」を付ける対象' + (state.bulk.isNew ? '(新規)' : '');
     // 開いた直後だけ、検索欄とリストを作る。再描画(件数の更新など)では、検索欄の入力・フォーカスを守る
     var stamp = state.bulk.kind + ':' + state.bulk.name;
     if (bulkList.getAttribute('data-for') !== stamp) {
@@ -2367,6 +2395,29 @@
     bulkResult.textContent = '';
     renderTagManageModal();
   }
+
+  // 新しい名前を入力して「新しく作って付ける」。既存と比較で同じ名前なら、既存の付け外しを開く
+  function createBulk() {
+    var isGroup = state.manageTab === 'group';
+    var name = bulkNewInput.value.trim();
+    var canon = name ? (isGroup ? canonicalGroup(name) : canonicalTag(name)) : '';
+    var existing = canon ? (isGroup ? getGroups() : getTags()).filter(function (t) { return t.key === tagKey(canon); })[0] : null;
+    if (!existing) {
+      var error = isGroup ? (name ? null : '名前を入力してください') : validateNewTagName(name);
+      if (error) { bulkNewError.textContent = error; return; }
+    }
+    bulkNewError.textContent = '';
+    bulkNewInput.value = '';
+    if (existing) { openBulk(existing.key); return; }
+    state.bulk = { kind: isGroup ? 'group' : 'tag', name: name, isNew: true, sel: {}, search: '' };
+    bulkResult.textContent = '';
+    renderTagManageModal();
+  }
+  document.getElementById('bulk-new-btn').addEventListener('click', createBulk);
+  bulkNewInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); createBulk(); }
+  });
+  bulkNewInput.addEventListener('input', function () { bulkNewError.textContent = ''; });
 
   bulkList.addEventListener('change', function (e) {
     var box = e.target.closest('input[data-id]');
@@ -2503,6 +2554,7 @@
     state.manageTab = tab.getAttribute('data-manage-tab');
     state.bulk = null;
     bulkResult.textContent = '';
+    bulkNewError.textContent = '';
     state.editingTag = null;
     state.confirmDeleteTag = null;
     state.confirmRename = null;
