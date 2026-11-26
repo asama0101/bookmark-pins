@@ -214,6 +214,14 @@
   .select-bar .btn-quiet { color: var(--amber-ink); background: rgba(255, 255, 255, 0.16); padding: 4px 12px; }
   .select-bar .btn-quiet:hover { background: rgba(255, 255, 255, 0.28); }
   .select-spacer { flex: 1 1 auto; }
+  .select-result { font-size: 0.8rem; opacity: 0.9; }
+  .select-result:empty { display: none; }
+  .select-pop { margin: 0 0 8px; padding: 10px 14px; border-radius: 18px; background: var(--card); box-shadow: 0 8px 22px -14px rgba(40, 60, 90, 0.5); display: flex; flex-direction: column; gap: 8px; }
+  .select-pop[hidden], .select-pop [hidden] { display: none; }
+  .select-pop-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .select-pop-row input { flex: 1 1 160px; min-width: 0; border: 1px solid rgba(40, 60, 90, 0.18); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 0.9rem; background: var(--card); color: var(--ink); }
+  .select-pop .btn-quiet { background: var(--ivory); color: var(--ink); padding: 4px 12px; }
+  .select-confirm { flex: 1 1 200px; font-size: 0.9rem; }
   .row-check { width: 17px; height: 17px; margin: 0; flex: 0 0 auto; accent-color: var(--amber); cursor: pointer; }
   .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); }
   .seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
@@ -1068,6 +1076,7 @@
       <label for="new-group-text">グループ</label>
       <input id="new-group-text" type="text" list="group-options" autocomplete="off" placeholder="グループを入力">
       <datalist id="group-options"></datalist>
+      <datalist id="tag-options"></datalist>
     </div>
     <div class="field">
       <button class="btn btn-amber" type="submit">保存</button>
@@ -1142,8 +1151,27 @@
         <span class="select-count" id="select-count" role="status"></span>
         <button type="button" class="btn-quiet" id="select-visible-btn">表示中を全選択</button>
         <button type="button" class="btn-quiet" id="select-clear-btn">選択を解除</button>
+        <button type="button" class="btn-quiet" id="select-tag-btn">タグ…</button>
+        <button type="button" class="btn-quiet" id="select-group-btn">グループ…</button>
+        <span class="select-result" id="select-result" role="status"></span>
         <span class="select-spacer"></span>
         <button type="button" class="btn-quiet" id="select-end-btn">終える</button>
+      </div>
+      <div class="select-pop" id="select-pop" hidden>
+        <div class="select-pop-row">
+          <strong id="select-pop-title"></strong>
+          <input type="text" id="select-name" autocomplete="off" placeholder="名前を入力..." aria-label="名前">
+          <button type="button" class="btn-quiet" data-select-op="add" data-kind="tag">付ける</button>
+          <button type="button" class="btn-quiet" data-select-op="remove" data-kind="tag">外す</button>
+          <button type="button" class="btn-quiet" data-select-op="set" data-kind="group">付ける(設定)</button>
+          <button type="button" class="btn-quiet" data-select-op="ungroup" data-kind="group">グループなしにする</button>
+        </div>
+        <p class="bulk-error" id="select-error" role="alert"></p>
+        <div class="select-pop-row" id="select-step2" hidden>
+          <span id="select-confirm" class="select-confirm"></span>
+          <button type="button" class="btn btn-amber" id="select-apply">適用</button>
+          <button type="button" class="btn-quiet" id="select-back">戻る</button>
+        </div>
       </div>
     </div>
     <section class="list-section"><div class="list-grid" id="bookmark-list"></div></section>
@@ -1223,6 +1251,7 @@
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
     colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
     selectMode: false,      // 一覧の選択モード(まとめて付け外しのために、行を選ぶ)。保存しない
+    selectPop: null,        // 選択バーの、タグ・グループの入力と確認({ kind: 'tag'|'group', plan })。開いていなければnull。保存しない
     selectedIds: {},        // 選択モードで選んだ行の id({ id: true })。検索・絞り込みを変えても残す。保存しない
     bulk: null,             // 管理モーダルの「付け外し」(チェックリスト)の途中の状態({ kind, name, isNew, sel: {id: true}, search })。開いていなければnull。保存しない
     manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
@@ -1729,11 +1758,19 @@
     return plan;
   }
 
+  // 選んだ件を、いまのグループに関わらず、グループなしにする計画(名前は要らない)。clear は、実際に変わる件(いまグループに入っている件)
+  function planUngroup(ids) {
+    var plan = { kind: 'ungroup', name: '', isNew: false, add: [], remove: [], moves: [], clear: [] };
+    bookmarks.forEach(function (b) { if (ids.indexOf(b.id) !== -1 && b.groupName !== '') plan.clear.push(b.id); });
+    return plan;
+  }
+
   // 計画を適用する。保存して、再描画する
   function applyPlan(plan) {
     var byId = Object.create(null);
     bookmarks.forEach(function (b) { byId[b.id] = b; });
     var isGroup = plan.kind === 'group';
+    (plan.clear || []).forEach(function (id) { if (byId[id]) byId[id].groupName = ''; });
     plan.add.forEach(function (id) {
       if (!byId[id]) return;
       if (isGroup) byId[id].groupName = plan.name; else addTagTo(byId[id].tags, plan.name);
@@ -1745,7 +1782,7 @@
     });
     // 編集フォームを開いている件に変更が入るときは、入力中の下書きも同じ変更にする(あとで保存しても、上書きされない)。入力中のほかの項目は残す
     var draft = state.editDraft;
-    if (draft && byId[draft.id] && (plan.add.indexOf(draft.id) !== -1 || plan.remove.indexOf(draft.id) !== -1)) {
+    if (draft && byId[draft.id] && (plan.add.indexOf(draft.id) !== -1 || plan.remove.indexOf(draft.id) !== -1 || (plan.clear || []).indexOf(draft.id) !== -1)) {
       draft.tags = byId[draft.id].tags.slice();
       draft.groupName = byId[draft.id].groupName;
     }
@@ -1763,6 +1800,7 @@
 
   // 計画の説明文。変わる件が無ければ ''。past が真なら、適用したあとの言い方
   function describePlan(plan, past) {
+    if (plan.kind === 'ungroup') return plan.clear.length ? plan.clear.length + ' 件を、グループなしに' + (past ? 'しました' : 'します') : '';
     var parts = [];
     if (plan.add.length) parts.push(plan.add.length + ' 件に付け');
     if (plan.remove.length) parts.push(plan.remove.length + ' 件から外し');
@@ -1817,7 +1855,87 @@
     document.getElementById('select-bar').hidden = !state.selectMode;
     var hidden = selectedHiddenCount();
     document.getElementById('select-count').textContent = selectedIdList().length + ' 件を選択中' + (hidden ? '(うち表示外 ' + hidden + ' 件)' : '');
+    if (!state.selectMode) state.selectPop = null;
+    if (state.selectPop && state.selectPop.plan) state.selectPop.plan = null; // 選択が変わったら、確認は作り直す
+    renderSelectPop();
   }
+  // 選択バーの、タグ・グループの入力と確認(state.selectPop)。名前の入力欄(#select-name)は、状態を持たず、DOM のまま
+  var selectName = document.getElementById('select-name');
+  function renderSelectPop() {
+    var pop = state.selectPop;
+    document.getElementById('select-pop').hidden = !pop;
+    if (pop) {
+      document.getElementById('select-pop-title').textContent = pop.kind === 'tag' ? 'タグ' : 'グループ';
+      selectName.setAttribute('list', pop.kind === 'tag' ? 'tag-options' : 'group-options');
+      Array.prototype.forEach.call(document.querySelectorAll('[data-select-op]'), function (btn) {
+        btn.hidden = btn.getAttribute('data-kind') !== pop.kind;
+      });
+      var plan = pop.plan;
+      document.getElementById('select-step2').hidden = !plan;
+      if (plan) {
+        var text = describePlan(plan, false);
+        var hidden = selectedHiddenCount();
+        document.getElementById('select-apply').hidden = !text;
+        document.getElementById('select-confirm').textContent = text
+          ? '選択中の ' + selectedIdList().length + ' 件のうち、' + text + (hidden ? '(表示外 ' + hidden + ' 件を含む)' : '')
+          : (plan.op === 'remove' ? '付いている件がありません' : '変更はありません');
+      }
+    }
+    syncHeaderHeight();
+  }
+  function openSelectPop(kind) {
+    state.selectPop = { kind: kind, plan: null };
+    selectName.value = '';
+    document.getElementById('select-error').textContent = '';
+    document.getElementById('select-result').textContent = '';
+    renderSelectPop();
+    selectName.focus();
+  }
+  function runSelectOp(op) {
+    var pop = state.selectPop;
+    if (!pop) return;
+    var ids = selectedIdList();
+    var name = selectName.value;
+    var error = '';
+    var plan = null;
+    if (op === 'ungroup') {
+      plan = planUngroup(ids);
+    } else if (!name.trim()) {
+      error = '名前を入力してください';
+    } else {
+      // 新しいタグ名(既存に無い名前)を付けるときだけ、区切り文字を検査する
+      var exists = getTags().some(function (t) { return t.key === tagKey(name.trim()); });
+      if (pop.kind === 'tag' && op === 'add' && !exists) error = validateNewTagName(name) || '';
+      if (!error) plan = planMembership(pop.kind, name, op === 'remove' ? [] : ids, op === 'remove' ? ids : []);
+    }
+    document.getElementById('select-error').textContent = error;
+    if (plan) plan.op = op;
+    pop.plan = plan;
+    renderSelectPop();
+  }
+  document.getElementById('select-tag-btn').addEventListener('click', function () { openSelectPop('tag'); });
+  document.getElementById('select-group-btn').addEventListener('click', function () { openSelectPop('group'); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-select-op]'), function (btn) {
+    btn.addEventListener('click', function () { runSelectOp(btn.getAttribute('data-select-op')); });
+  });
+  selectName.addEventListener('input', function () {
+    document.getElementById('select-error').textContent = '';
+    if (state.selectPop && state.selectPop.plan) { state.selectPop.plan = null; renderSelectPop(); } // 名前を変えたら、古い確認は使わない
+  });
+  document.getElementById('select-back').addEventListener('click', function () {
+    if (state.selectPop) { state.selectPop.plan = null; renderSelectPop(); }
+  });
+  document.getElementById('select-apply').addEventListener('click', function () {
+    var pop = state.selectPop;
+    if (!pop || !pop.plan) return;
+    var plan = pop.plan;
+    var text = describePlan(plan, true);
+    if (!text) return;
+    state.selectPop = null;
+    document.getElementById('select-result').textContent = text;
+    applyPlan(plan); // 保存して render() する。選択は残す
+  });
+
   function setSelected(id, on) {
     if (on) state.selectedIds[id] = true; else delete state.selectedIds[id];
     renderSelectBar();
@@ -1867,6 +1985,7 @@
     renderDetail();
     addTagPicker.refresh();
     // グループの入力欄(追加・編集)の候補は、既存のグループの名前
+    document.getElementById('tag-options').innerHTML = getTags().map(function (t) { return '<option value="' + escapeHtml(t.name) + '">'; }).join('');
     document.getElementById('group-options').innerHTML = getGroups().map(function (g) { return '<option value="' + escapeHtml(g.name) + '">'; }).join('');
     if (!tagManageOverlay.hidden) renderTagManageModal(); // モーダルが開いている間は常に最新の件数を反映する
     renderSelectBar();
@@ -3482,6 +3601,13 @@
     if (openKind) {
       closeFilterPanels();
       filterPanels[openKind].btn.focus();
+      return;
+    }
+
+    // 選択バーの、タグ・グループの入力と確認だけを閉じる(選択モードは終えない。選択を失わないため)
+    if (state.selectPop !== null) {
+      state.selectPop = null;
+      renderSelectPop();
       return;
     }
 
