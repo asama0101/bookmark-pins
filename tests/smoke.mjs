@@ -435,6 +435,20 @@ check('詳細にグループが出る', detG.includes('グループ仕事'), det
 await page.click('.tag-group[data-group=""] .card--list', { position: { x: 6, y: 6 } });
 check('グループが無いブックマークの詳細には、グループの項目が出ない', !(await page.$eval('#detail', (e) => e.textContent)).includes('グループ'));
 
+// ===== 管理モーダルのタブ順(グループ → タグ) =====
+await open(page, [bm(0, { groupName: 'a', tags: ['x'] })]);
+await page.click('#tag-manage-open-btn');
+const tabOrder = await page.$$eval('.manage-tabs [data-manage-tab]', (els) => els.map((e) => e.dataset.manageTab));
+const tabSel = await page.$$eval('.manage-tabs [data-manage-tab]', (els) => els.map((e) => e.getAttribute('aria-selected')));
+check('管理モーダルは「グループ」のタブが先頭で、開くと選ばれている', JSON.stringify(tabOrder) === JSON.stringify(['group', 'tag']) && JSON.stringify(tabSel) === JSON.stringify(['true', 'false']), { tabOrder, tabSel });
+check('管理モーダルのタイトルは「グループ・タグの管理」', (await page.$eval('#tag-manage-title', (e) => e.textContent.trim())) === 'グループ・タグの管理');
+check('開いた直後の一覧はグループ', JSON.stringify(await page.$$eval('#tag-manage-list .tag-manage-name', (els) => els.map((e) => e.textContent))) === JSON.stringify(['a']));
+await page.click('[data-manage-tab="tag"]');
+await page.click('#tag-manage-close-btn');
+await page.click('#tag-manage-open-btn');
+check('開き直すと、また「グループ」が選ばれている', (await page.$eval('[data-manage-tab="group"]', (e) => e.getAttribute('aria-selected'))) === 'true');
+await page.click('#tag-manage-close-btn');
+
 // ===== グループ(管理: 改名・統合・削除・並べ替え) =====
 const mdata = [bm(0, { groupName: 'a', tags: ['x'] }), bm(1, { groupName: 'b' }), bm(2, { groupName: 'c' })];
 await open(page, mdata);
@@ -501,6 +515,7 @@ await open(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
 await page.click('#group-filter-btn');
 await page.click('#group-popover [data-filter-key="same"]');
 await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="tag"]');
 await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="same"]');
 await page.fill('.tag-rename-input', 'renamed');
 await page.click('.tag-rename-form button[type=submit]');
@@ -709,6 +724,7 @@ await page.click('#group-filter-btn');
 check('グループのパネルの色の点は、グループの色', (await styleH(page, '#group-popover [data-filter-key="same"]')) === '100');
 await page.keyboard.press('Escape');
 await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="tag"]');
 await page.click(colorBtn('same'));
 await slide(page, 200);
 check('タグの色を変えても、同名のグループの区画の色は変わらない', (await styleH(page, '.tag-group[data-group="same"]')) === '100' && JSON.stringify(await storedJson(page, 'bookmarks_tag_colors')) === JSON.stringify({ same: 200 }) && JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ same: 100 }));
@@ -763,6 +779,153 @@ const specialLabel = await page.$eval('#tag-manage-list .tag-color-btn', (e) => 
 await page.click('#tag-manage-list .tag-color-btn');
 const specialRange = await page.$eval('#tag-manage-list .tag-color-range', (e) => e.getAttribute('aria-label'));
 check('特殊文字のグループ名で、色の丸・スライダー・パネルの行が壊れない', specialG === '<b>&"' && specialLabel === '<b>&"の色を選ぶ' && specialRange === '<b>&"の色相', { specialG, specialLabel, specialRange });
+
+// ===== タイル/リストの切り替え =====
+const modeOf = (p) => p.$eval('#bookmark-list', (e) => (e.classList.contains('list-mode') ? 'list' : '') + (e.classList.contains('tile-mode') ? 'tile' : ''));
+const pressed = (p, id) => p.$eval(id, (e) => e.getAttribute('aria-pressed'));
+await open(page, [bm(0), bm(1), bm(2)]);
+check('表示は既定でタイル', (await modeOf(page)) === 'tile' && (await pressed(page, '#layout-tile-btn')) === 'true' && (await pressed(page, '#layout-list-btn')) === 'false', await modeOf(page));
+const dataBefore = await page.evaluate(() => localStorage.getItem('bookmarks_data'));
+await page.click('#layout-list-btn');
+check('リストに切り替えると保存される', (await modeOf(page)) === 'list' && (await page.evaluate(() => localStorage.getItem('bookmarks_layout'))) === 'list');
+check('切り替えでデータは変わらない', (await page.evaluate(() => localStorage.getItem('bookmarks_data'))) === dataBefore);
+await page.reload();
+check('再読み込みしてもリスト', (await modeOf(page)) === 'list' && (await pressed(page, '#layout-list-btn')) === 'true');
+await page.click('#layout-tile-btn');
+check('タイルへ戻すと保存される', (await modeOf(page)) === 'tile' && (await page.evaluate(() => localStorage.getItem('bookmarks_layout'))) === 'tile');
+await page.evaluate(() => localStorage.setItem('bookmarks_layout', 'zzz'));
+await page.reload();
+check('保存された値が不正ならタイル', (await modeOf(page)) === 'tile');
+{
+  const p2 = await ctx.newPage();
+  await p2.addInitScript(() => {
+    const orig = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (k) { if (k === 'bookmarks_layout') throw new Error('blocked'); return orig.call(this, k); };
+  });
+  await p2.goto(URL_);
+  check('localStorage が読めなくてもタイルで動く', (await modeOf(p2)) === 'tile' && (await titles(p2)).length === 3, await titles(p2));
+  await p2.close();
+}
+await page.click('#layout-list-btn');
+await page.locator('.card--list [data-action="edit"]').first().click();
+await page.fill('#edit-memo', 'draft');
+await page.click('#layout-tile-btn');
+await page.click('#layout-list-btn');
+const editW = await page.evaluate(() => { const f = document.querySelector('#edit-memo').closest('.card'); return [Math.round(f.getBoundingClientRect().width), Math.round(f.parentElement.getBoundingClientRect().width)]; });
+check('編集フォームを開いたまま切り替えても入力が残り、全幅のまま', (await page.$eval('#edit-memo', (e) => e.value)) === 'draft' && Math.abs(editW[0] - editW[1]) <= 2, editW);
+{
+  const errs = [];
+  const p3 = await ctx.newPage();
+  p3.on('pageerror', (e) => errs.push(String(e)));
+  await open(p3, []);
+  await p3.click('#layout-list-btn');
+  await p3.click('#layout-tile-btn');
+  check('0 件でも切り替えられる', errs.length === 0 && (await p3.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'), errs);
+  await p3.close();
+}
+
+// ===== リスト表示の見た目・タグの「+N」・ドラッグ =====
+const manyTags = Array.from({ length: 12 }, (_, i) => 'タグ名その' + i);
+const listData = [
+  bm(0, { groupName: 'g1', title: 'L'.repeat(80), memo: 'M'.repeat(200), tags: manyTags }),
+  bm(1, { groupName: 'g1', title: 'T1' }),
+  bm(2, { groupName: 'g1', title: 'T2' }),
+  bm(3, { groupName: 'g2', title: 'T3' })
+];
+await open(page, listData);
+const colCount = () => page.$eval('.tag-group', (e) => getComputedStyle(e).gridTemplateColumns.split(' ').length);
+check('タイルは、区画が複数列', (await colCount()) >= 2, await colCount());
+await page.click('#layout-list-btn');
+check('リストは、区画が1列', (await colCount()) === 1, await colCount());
+const longH = await page.$eval('.card--list', (e) => Math.round(e.getBoundingClientRect().height));
+check('リストは、長いタイトル・メモ・多数のタグの行も 80px 以下', longH <= 80, longH);
+const tagRows = await page.$eval('.card--list .row-tags', (box) => {
+  const vis = [...box.querySelectorAll('.row-tag')].filter((t) => !t.hidden);
+  const more = box.querySelector('.row-tag-more');
+  const hiddenN = box.querySelectorAll('.row-tag[hidden]').length;
+  return { tops: [...new Set(vis.concat(more ? [more] : []).map((e) => e.offsetTop))].length, more: more ? more.textContent : null, hiddenN };
+});
+check('リストのタグは1行で、溢れは +N', tagRows.tops === 1 && tagRows.hiddenN > 0 && tagRows.more === '+' + tagRows.hiddenN, tagRows);
+const noOverflow = () => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+check('リストでもページが横にはみ出さない(1280px)', await noOverflow());
+const rowH = (i) => page.$$eval('.card--list', (els, k) => Math.round(els[k].getBoundingClientRect().height), i);
+const h1280 = await rowH(1);
+check('リスト(幅 1280px。区画の幅 780px 以下)は、メモがタイトルの下の2段で、80px 以下', h1280 > 48 && h1280 <= 80, h1280);
+check('リスト(幅 1280px)でも、メモが見える(幅がある)', await page.$eval('.card--list .row-memo-preview', (e) => e.getBoundingClientRect().width > 100));
+await page.setViewportSize({ width: 600, height: 800 });
+check('リストは幅 600px でも横にはみ出さない', await noOverflow());
+await page.setViewportSize({ width: 400, height: 800 });
+check('リストは幅 400px でも横にはみ出さず、行がさらに高くなる(3段)', (await noOverflow()) && (await rowH(1)) > h1280, { h1280, h400: await rowH(1) });
+await page.setViewportSize({ width: 1900, height: 900 });
+const wide = await page.$eval('.card--list', (c) => {
+  const r = (sel) => c.querySelector(sel).getBoundingClientRect();
+  return { h: Math.round(c.getBoundingClientRect().height), sameLine: Math.abs(r('.card-title').top - r('.row-memo-preview').top) < 8 };
+});
+check('リストは、広いと1行(タイトルとメモが同じ行で、48px 以下)', wide.h <= 56 && wide.sameLine, wide);
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.click('#layout-tile-btn');
+const tileTagInfo = await page.$eval('.card--list .row-tags', (box) => ({ hidden: box.querySelectorAll('.row-tag[hidden]').length }));
+check('タイルに戻すと、タグは3行基準に戻る', tileTagInfo.hidden < tagRows.hiddenN, { tileTagInfo, tagRows });
+await page.click('#layout-list-btn');
+await page.fill('#search-input', 'T');
+check('検索中のリストは、グリップが出ず、横にはみ出さない', (await page.$$('.row-grip')).length === 0 && (await noOverflow()));
+await page.fill('#search-input', '');
+await page.press('#search-input', 'Escape');
+// ドラッグ(同じ区画 g1 の中): T1 を T2 の下半分へ → L..., T2, T1
+// locator.dragTo は、同じページで続けて使うと、2回目以降に別の行を掴むことがある。マウスを直接動かす
+const dragCard = async (srcTitle, dstTitle, yRatio, xRatio) => {
+  const sb = await page.locator('.card--list', { hasText: srcTitle }).first().boundingBox();
+  const db = await page.locator('.card--list', { hasText: dstTitle }).first().boundingBox();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2 + 5, { steps: 3 });
+  await page.mouse.move(db.x + db.width * xRatio, db.y + db.height * yRatio, { steps: 10 });
+  await page.mouse.up();
+};
+await dragCard('T1', 'T2', 0.75, 0.5);
+const orderAfter = async () => (await titles(page)).map((t) => (t.length > 10 ? 'L' : t));
+check('リストで、下半分に落とすと直後に入り、順が保存される', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T2', 'T1', 'T3']) && JSON.stringify((await storedJson(page, 'bookmarks_data')).map((b) => b.title.length > 10 ? 'L' : b.title)) === JSON.stringify(['L', 'T2', 'T1', 'T3']), { ui: await orderAfter() });
+await dragCard('T1', 'T2', 0.25, 0.5);
+check('リストで、上半分に落とすと直前に入る', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T1', 'T2', 'T3']), await orderAfter());
+await page.click('#layout-tile-btn');
+// タイルは幅 1280px で 2 列(L と T1 が 1 行目)。画面内の L と T1 で、左右の判定を確かめる
+await dragCard('T1', 'LLLLL', 0.5, 0.2);
+check('タイルは、左半分に落とすと直前に入る(左右で判定)', JSON.stringify(await orderAfter()) === JSON.stringify(['T1', 'L', 'T2', 'T3']), await orderAfter());
+await dragCard('T1', 'LLLLL', 0.5, 0.8);
+check('タイルは、右半分に落とすと直後に入る(左右で判定)', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T1', 'T2', 'T3']), await orderAfter());
+
+// ===== 最終レビューの指摘 =====
+// (1) タイルのままでも、幅 1280px でヘッダーが1行のまま(切り替えボタンで2行に折り返さない)
+await open(page, [bm(0), bm(1)]);
+await page.setViewportSize({ width: 1280, height: 720 });
+check('幅 1280px で、ヘッダーは1行(切り替えボタンを足しても折り返さない)', (await page.$eval('.app-header', (e) => Math.round(e.getBoundingClientRect().height))) < 100, await page.$eval('.app-header', (e) => e.getBoundingClientRect().height));
+check('切り替えボタンは、件数表示の行にある', (await page.$('.list-toolbar #layout-tile-btn')) !== null && (await page.$('.list-toolbar #layout-list-btn')) !== null);
+// (2) リストのドラッグ中の位置表示は、上下の線(上半分で上、下半分で下)
+await page.click('#layout-list-btn');
+{
+  const sb = await page.locator('.card--list', { hasText: 'T1' }).first().boundingBox();
+  const db = await page.locator('.card--list', { hasText: 'T0' }).first().boundingBox();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2 - 5, { steps: 3 });
+  await page.mouse.move(db.x + db.width / 2, db.y + db.height * 0.2, { steps: 10 });
+  await page.waitForTimeout(300); // box-shadow のトランジション(0.15s)が終わるのを待つ
+  const shadowTop = await page.$eval('.card--list.drop-before', (e) => getComputedStyle(e).boxShadow).catch(() => null);
+  await page.mouse.move(db.x + db.width / 2, db.y + db.height * 0.8, { steps: 4 });
+  await page.waitForTimeout(300);
+  const shadowBottom = await page.$eval('.card--list.drop-after', (e) => getComputedStyle(e).boxShadow).catch(() => null);
+  await page.mouse.up();
+  check('リストのドラッグ中の線は、上半分で上、下半分で下', !!shadowTop && !!shadowBottom && /0px 3px 0px 0px inset/.test(shadowTop) && /0px -3px 0px 0px inset/.test(shadowBottom), { shadowTop, shadowBottom });
+}
+// (3) 先頭のタグが長くても、リストの行は他の行と同じ高さ
+await open(page, [bm(0, { tags: ['とてもとても長いタグの名前がここに入ります。四十文字を超える長さです。四十文字を超える長さです', 'b', 'c'] }), bm(1, { tags: ['b'] })]);
+await page.click('#layout-list-btn');
+const hs = await page.$$eval('.card--list', (els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+check('リストは、先頭のタグが長くても、行の高さが揃う', hs[0] === hs[1] && (await noOverflow()), hs);
+// (4) 操作アイコンが5個の行でも、タイトルが 120px 以上
+await open(page, [bm(0, { title: 'ログインのある行', loginId: 'u', loginPassword: 'p', scheme: 'file', url: 'file:///C:/a.txt', domain: null, tags: ['タグ'] })]);
+await page.click('#layout-list-btn');
+check('リストは、操作アイコンが5個でも、タイトルが 120px 以上', (await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width))) >= 120, await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width)));
 
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');

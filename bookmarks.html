@@ -203,6 +203,14 @@
     border-color: var(--amber);
   }
 
+  /* タイル/リストの切り替え */
+  .list-toolbar .seg { margin-left: auto; }
+  .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); }
+  .seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.15); }
+  .seg button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
   .btn-quiet {
     background: transparent;
     color: var(--ink-soft);
@@ -638,10 +646,13 @@
   /* 編集フォームのカードの旧い飾り帯。新しいデザインでは使わない */
   .card-stub { display: none; }
 
-  /* ドラッグ中の位置表示: 区画はグリッドなので、左右の縁の線で示す(左半分に落とすと前、右半分で後ろ) */
+  /* ドラッグ中の位置表示: タイルは区画がグリッドなので、左右の縁の線で示す(左半分に落とすと前、右半分で後ろ) */
   .card.dragging { opacity: 0.45; }
   .card.drop-before { box-shadow: inset 4px 0 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
   .card.drop-after { box-shadow: inset -4px 0 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
+  /* リストは1列なので、上下の線で示す(上半分に落とすと前、下半分で後ろ) */
+  #bookmark-list.list-mode .card.drop-before { box-shadow: inset 0 3px 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
+  #bookmark-list.list-mode .card.drop-after { box-shadow: inset 0 -3px 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
   .card:focus { outline: 3px solid var(--amber); outline-offset: 3px; }
 
   .card-body {
@@ -767,6 +778,41 @@
   /* チップと操作アイコンは、同じ行に収まるときだけ並ぶ。チップの欄が狭くなる(200px 未満)ときは、チップがカードの全幅の行になり、操作アイコンは次の行の右端に回る */
   .card--list .row-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: auto; }
   .card--list .card-footer { margin-top: 0; margin-left: auto; flex: 0 0 auto; }
+
+  /* リスト表示(#bookmark-list.list-mode): 1件が1行。カードのマークアップは同じで、並び方だけ替える。
+     .row-top・.row-foot は display: contents にして、グリップ・アイコン・タイトル・メモ・タグ・操作を、行(グリッド)の直接の子として並べる。
+     区画の幅(コンテナ)で形が変わる: 広いときは1行、780px 以下はタイトルの下にメモを置く2段、460px 以下は、メモ・タグを下の段に回す。
+     タグは折り返しを許したまま、collapseRowTags() が1行に絞って「+N」を出す */
+  #bookmark-list.list-mode .tag-group { grid-template-columns: 1fr; gap: 6px; margin-bottom: 28px; container-type: inline-size; }
+  #bookmark-list.list-mode .card--list {
+    display: grid; grid-template-columns: auto auto minmax(0, 200px) minmax(0, 1fr) minmax(0, 240px) auto;
+    align-items: center; column-gap: 14px; min-height: 0; padding: 8px 14px; border-radius: 16px;
+  }
+  #bookmark-list.list-mode .row-pin { display: none; }
+  #bookmark-list.list-mode .row-top, #bookmark-list.list-mode .row-foot { display: contents; }
+  #bookmark-list.list-mode .row-grip { grid-column: 1; }
+  #bookmark-list.list-mode .seal { grid-column: 2; width: 32px; height: 32px; border-radius: 10px; }
+  #bookmark-list.list-mode .seal img, #bookmark-list.list-mode .seal svg { width: 18px; height: 18px; }
+  #bookmark-list.list-mode .card--list .card-title { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bookmark-list.list-mode .row-memo-preview { grid-column: 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bookmark-list.list-mode .row-tags { grid-column: 5; min-width: 0; }
+  #bookmark-list.list-mode .row-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #bookmark-list.list-mode .card--list .card-footer { grid-column: 6; margin-left: 0; }
+  @container (max-width: 780px) {
+    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 140px) auto; row-gap: 2px; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 3; }
+    #bookmark-list.list-mode .card--list .card-title { grid-column: 3; grid-row: 1; }
+    #bookmark-list.list-mode .row-memo-preview { grid-column: 3; grid-row: 2; }
+    #bookmark-list.list-mode .row-tags { grid-column: 4; grid-row: 1 / 3; }
+    #bookmark-list.list-mode .card--list .card-footer { grid-column: 5; grid-row: 1 / 3; }
+  }
+  @container (max-width: 460px) {
+    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) auto; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 4; }
+    #bookmark-list.list-mode .card--list .card-footer { grid-column: 4; grid-row: 1; }
+    #bookmark-list.list-mode .row-memo-preview { grid-column: 3 / 5; grid-row: 2; }
+    #bookmark-list.list-mode .row-tags { grid-column: 3 / 5; grid-row: 3; }
+  }
   .row-grip { color: var(--ink-soft); opacity: 0.45; font-size: 0.85rem; cursor: grab; flex: 0 0 auto; }
 
   .row-memo-preview {
@@ -1050,6 +1096,10 @@
           <span id="filter-status-text"></span>
           <button type="button" class="btn-quiet" id="filter-clear-btn">解除 ×</button>
         </div>
+        <span class="seg" role="group" aria-label="表示の切り替え">
+          <button type="button" id="layout-tile-btn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>タイル</button>
+          <button type="button" id="layout-list-btn" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="3" rx="1.5"/><rect x="1" y="6.5" width="14" height="3" rx="1.5"/><rect x="1" y="11" width="14" height="3" rx="1.5"/></svg>リスト</button>
+        </span>
       </div>
     </div>
     <section class="list-section"><div class="list-grid" id="bookmark-list"></div></section>
@@ -1058,19 +1108,19 @@
 </div>
 
 <footer class="data-controls">
-  <span class="app-version">bookmark-pins v0.5.0</span>
+  <span class="app-version">bookmark-pins v0.6.0</span>
   <span>データはこの端末のブラウザ内(localStorage)に保存されます。</span>
 </footer>
 
 <div class="modal-overlay" id="tag-manage-overlay" hidden>
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
     <div class="modal-header">
-      <h2 id="tag-manage-title">タグ・グループの管理</h2>
+      <h2 id="tag-manage-title">グループ・タグの管理</h2>
       <button type="button" class="modal-close-btn" id="tag-manage-close-btn" aria-label="閉じる">&times;</button>
     </div>
     <div class="manage-tabs" role="tablist" aria-label="管理する対象">
-      <button type="button" role="tab" data-manage-tab="tag" aria-selected="true">タグ</button>
-      <button type="button" role="tab" data-manage-tab="group" aria-selected="false">グループ</button>
+      <button type="button" role="tab" data-manage-tab="group" aria-selected="true">グループ</button>
+      <button type="button" role="tab" data-manage-tab="tag" aria-selected="false">タグ</button>
     </div>
     <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
@@ -1108,7 +1158,7 @@
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
     colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
-    manageTab: 'tag'        // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'tag' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
+    manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
   /* ---------- データ層 ---------- */
@@ -1198,6 +1248,33 @@
   function saveGroupOrder() {
     localStorage.setItem(GROUPS_ORDER_KEY, JSON.stringify(groupOrder));
   }
+
+  // 一覧の表示('tile' か 'list')。好みなので、ブックマークのデータとは別のキーに持ち、エクスポートには含めない。
+  // 無い・不正・読めないときはタイル
+  var LAYOUT_KEY = 'bookmarks_layout';
+  function loadLayout() {
+    try { return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'tile'; } catch (e) { return 'tile'; }
+  }
+  var layout = loadLayout();
+
+  // #bookmark-list のクラスと、2つのボタンの aria-pressed を layout に合わせる(起動時と切り替え時)
+  function applyLayoutClass() {
+    var listEl = document.getElementById('bookmark-list');
+    listEl.classList.toggle('tile-mode', layout === 'tile');
+    listEl.classList.toggle('list-mode', layout === 'list');
+    document.getElementById('layout-tile-btn').setAttribute('aria-pressed', String(layout === 'tile'));
+    document.getElementById('layout-list-btn').setAttribute('aria-pressed', String(layout === 'list'));
+  }
+  // 切り替えでは render() を呼ばず、クラスだけ替える。タグの「+N」は幅で決まるので、やり直す
+  function setLayout(mode) {
+    layout = mode;
+    try { localStorage.setItem(LAYOUT_KEY, mode); } catch (e) { /* 保存できなくても切り替えは続ける */ }
+    applyLayoutClass();
+    collapseRowTags(document.getElementById('bookmark-list'));
+  }
+  applyLayoutClass();
+  document.getElementById('layout-tile-btn').addEventListener('click', function () { setLayout('tile'); });
+  document.getElementById('layout-list-btn').addEventListener('click', function () { setLayout('list'); });
 
   // タグごとの色(タグのキー → 色相 0〜359)。選んでいない(自動。タグ名から決める)タグは持たない。
   // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneUnusedKeys() が外す
@@ -2069,7 +2146,7 @@
   });
 
   function openTagManageModal() {
-    state.manageTab = 'tag';
+    state.manageTab = 'group';
     tagManageOverlay.hidden = false;
     renderTagManageModal();
     var firstBtn = tagManageList.querySelector('button');
@@ -2479,7 +2556,7 @@
       getDragged: function () { return draggedGroup === group ? draggedCardId : null; },
       setDragged: function (v) { draggedCardId = v; draggedGroup = v ? group : null; },
       dropEffect: 'move',
-      horizontal: true, // 区画はグリッドなので、カードの左半分に落とすと前、右半分で後ろ
+      get horizontal() { return layout === 'tile'; }, // タイルはグリッドなので、カードの左半分に落とすと前、右半分で後ろ。リストは1列なので、上半分で前、下半分で後ろ
       onDrop: function (draggedId, targetId, after) { moveBookmark(draggedId, targetId, after); }
     });
   }
@@ -2550,6 +2627,7 @@
   }
 
   var MAX_TAG_ROWS = 3; // カードのタグのチップを出す行数の上限。超えるぶんは「+N」にまとめる
+  function maxTagRows() { return layout === 'list' ? 1 : MAX_TAG_ROWS; } // リストは1行
 
   // root の中の各カードで、タグのチップが MAX_TAG_ROWS 行を超えるとき、後ろのチップを隠して「+N」(ホバーで名前)を足す。何度呼んでも同じ結果になる。
   function collapseRowTags(root) {
@@ -2566,13 +2644,13 @@
         });
         return tops.length;
       }
-      if (rowCount() <= MAX_TAG_ROWS) return;
+      if (rowCount() <= maxTagRows()) return;
       more = document.createElement('span');
       more.className = 'row-tag-more';
       more.textContent = '+0';
       box.appendChild(more);
       var hidden = 0;
-      for (var i = tags.length - 1; i > 0 && rowCount() > MAX_TAG_ROWS; i--) {
+      for (var i = tags.length - 1; i > 0 && rowCount() > maxTagRows(); i--) {
         tags[i].hidden = true;
         hidden++;
         more.textContent = '+' + hidden;
