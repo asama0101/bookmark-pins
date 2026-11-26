@@ -203,6 +203,13 @@
     border-color: var(--amber);
   }
 
+  /* タイル/リストの切り替え */
+  .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); }
+  .seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
+  .seg button:hover { color: var(--ink); }
+  .seg button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgba(40, 60, 90, 0.15); }
+  .seg button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
   .btn-quiet {
     background: transparent;
     color: var(--ink-soft);
@@ -956,6 +963,10 @@
     <button class="btn btn-ghost btn-compact" id="group-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="group-popover">グループ</button>
     <button class="btn btn-ghost btn-compact" id="tag-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="tag-popover">タグ</button>
     <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">管理</button>
+    <span class="seg" role="group" aria-label="表示の切り替え">
+      <button type="button" id="layout-tile-btn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>タイル</button>
+      <button type="button" id="layout-list-btn" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="3" rx="1.5"/><rect x="1" y="6.5" width="14" height="3" rx="1.5"/><rect x="1" y="11" width="14" height="3" rx="1.5"/></svg>リスト</button>
+    </span>
     <button class="btn btn-ghost" id="export-btn" type="button">エクスポート</button>
     <button class="btn btn-ghost" id="import-btn" type="button">インポート</button>
     <button class="btn btn-ghost" id="help-btn" type="button">ヘルプ</button>
@@ -1198,6 +1209,33 @@
   function saveGroupOrder() {
     localStorage.setItem(GROUPS_ORDER_KEY, JSON.stringify(groupOrder));
   }
+
+  // 一覧の表示('tile' か 'list')。好みなので、ブックマークのデータとは別のキーに持ち、エクスポートには含めない。
+  // 無い・不正・読めないときはタイル
+  var LAYOUT_KEY = 'bookmarks_layout';
+  function loadLayout() {
+    try { return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'tile'; } catch (e) { return 'tile'; }
+  }
+  var layout = loadLayout();
+
+  // #bookmark-list のクラスと、2つのボタンの aria-pressed を layout に合わせる(起動時と切り替え時)
+  function applyLayoutClass() {
+    var listEl = document.getElementById('bookmark-list');
+    listEl.classList.toggle('tile-mode', layout === 'tile');
+    listEl.classList.toggle('list-mode', layout === 'list');
+    document.getElementById('layout-tile-btn').setAttribute('aria-pressed', String(layout === 'tile'));
+    document.getElementById('layout-list-btn').setAttribute('aria-pressed', String(layout === 'list'));
+  }
+  // 切り替えでは render() を呼ばず、クラスだけ替える。タグの「+N」は幅で決まるので、やり直す
+  function setLayout(mode) {
+    layout = mode;
+    try { localStorage.setItem(LAYOUT_KEY, mode); } catch (e) { /* 保存できなくても切り替えは続ける */ }
+    applyLayoutClass();
+    collapseRowTags(document.getElementById('bookmark-list'));
+  }
+  applyLayoutClass();
+  document.getElementById('layout-tile-btn').addEventListener('click', function () { setLayout('tile'); });
+  document.getElementById('layout-list-btn').addEventListener('click', function () { setLayout('list'); });
 
   // タグごとの色(タグのキー → 色相 0〜359)。選んでいない(自動。タグ名から決める)タグは持たない。
   // ブックマークのデータとは別のキーに持ち、エクスポート/インポートには含める。使われなくなったタグは pruneUnusedKeys() が外す

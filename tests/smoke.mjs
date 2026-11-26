@@ -780,6 +780,50 @@ await page.click('#tag-manage-list .tag-color-btn');
 const specialRange = await page.$eval('#tag-manage-list .tag-color-range', (e) => e.getAttribute('aria-label'));
 check('特殊文字のグループ名で、色の丸・スライダー・パネルの行が壊れない', specialG === '<b>&"' && specialLabel === '<b>&"の色を選ぶ' && specialRange === '<b>&"の色相', { specialG, specialLabel, specialRange });
 
+// ===== タイル/リストの切り替え =====
+const modeOf = (p) => p.$eval('#bookmark-list', (e) => (e.classList.contains('list-mode') ? 'list' : '') + (e.classList.contains('tile-mode') ? 'tile' : ''));
+const pressed = (p, id) => p.$eval(id, (e) => e.getAttribute('aria-pressed'));
+await open(page, [bm(0), bm(1), bm(2)]);
+check('表示は既定でタイル', (await modeOf(page)) === 'tile' && (await pressed(page, '#layout-tile-btn')) === 'true' && (await pressed(page, '#layout-list-btn')) === 'false', await modeOf(page));
+const dataBefore = await page.evaluate(() => localStorage.getItem('bookmarks_data'));
+await page.click('#layout-list-btn');
+check('リストに切り替えると保存される', (await modeOf(page)) === 'list' && (await page.evaluate(() => localStorage.getItem('bookmarks_layout'))) === 'list');
+check('切り替えでデータは変わらない', (await page.evaluate(() => localStorage.getItem('bookmarks_data'))) === dataBefore);
+await page.reload();
+check('再読み込みしてもリスト', (await modeOf(page)) === 'list' && (await pressed(page, '#layout-list-btn')) === 'true');
+await page.click('#layout-tile-btn');
+check('タイルへ戻すと保存される', (await modeOf(page)) === 'tile' && (await page.evaluate(() => localStorage.getItem('bookmarks_layout'))) === 'tile');
+await page.evaluate(() => localStorage.setItem('bookmarks_layout', 'zzz'));
+await page.reload();
+check('保存された値が不正ならタイル', (await modeOf(page)) === 'tile');
+{
+  const p2 = await ctx.newPage();
+  await p2.addInitScript(() => {
+    const orig = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (k) { if (k === 'bookmarks_layout') throw new Error('blocked'); return orig.call(this, k); };
+  });
+  await p2.goto(URL_);
+  check('localStorage が読めなくてもタイルで動く', (await modeOf(p2)) === 'tile' && (await titles(p2)).length === 3, await titles(p2));
+  await p2.close();
+}
+await page.click('#layout-list-btn');
+await page.locator('.card--list [data-action="edit"]').first().click();
+await page.fill('#edit-memo', 'draft');
+await page.click('#layout-tile-btn');
+await page.click('#layout-list-btn');
+const editW = await page.evaluate(() => { const f = document.querySelector('#edit-memo').closest('.card'); return [Math.round(f.getBoundingClientRect().width), Math.round(f.parentElement.getBoundingClientRect().width)]; });
+check('編集フォームを開いたまま切り替えても入力が残り、全幅のまま', (await page.$eval('#edit-memo', (e) => e.value)) === 'draft' && Math.abs(editW[0] - editW[1]) <= 2, editW);
+{
+  const errs = [];
+  const p3 = await ctx.newPage();
+  p3.on('pageerror', (e) => errs.push(String(e)));
+  await open(p3, []);
+  await p3.click('#layout-list-btn');
+  await p3.click('#layout-tile-btn');
+  check('0 件でも切り替えられる', errs.length === 0 && (await p3.$eval('#bookmark-list', (e) => e.textContent)).includes('ブックマークがありません'), errs);
+  await p3.close();
+}
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
