@@ -1097,6 +1097,73 @@ await page.click('#bulk-apply');
 await page.click('#tag-manage-close-btn');
 check('下書きが無い(開いただけ)でも、フォームが新しい値で描かれる', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('新規タグ'));
 
+// ===== 選択モード(A) =====
+await page.setViewportSize({ width: 1280, height: 720 });
+const selData = () => [bm(0, { groupName: 'g1' }), bm(1, { groupName: 'g1' }), bm(2, { groupName: 'g1' }), bm(3, { groupName: 'g2' })];
+const selCount = (p) => p.$eval('#select-count', (e) => e.textContent.trim());
+const rowCheck = (p, t) => p.locator('.card--list', { hasText: t }).first().locator('.row-check');
+const selectedTitles = (p) => p.$$eval('.row-check:checked', (els) => els.map((e) => e.closest('.card').querySelector('.card-title').textContent));
+await open(page, selData());
+check('選択モードでないとき、通常の行は変わらない(チェックなし・グリップあり)', (await page.$$('.row-check')).length === 0 && (await page.$$('.row-grip')).length === 4 && (await page.$eval('#select-bar', (e) => e.hidden)));
+await page.click('#select-toggle-btn');
+check('「選択」を押すと、行にチェックボックスとバーが出る', (await page.$$('.row-check')).length === 4 && !(await page.$eval('#select-bar', (e) => e.hidden)) && (await page.$eval('#select-toggle-btn', (e) => e.getAttribute('aria-pressed'))) === 'true');
+check('選択モード中は、ドラッグが止まる(グリップなし・draggable なし)', (await page.$$('.row-grip')).length === 0 && (await page.$$('.card--list[draggable="true"]')).length === 0);
+await rowCheck(page, 'T0').check(); await rowCheck(page, 'T1').check();
+check('チェックで選ぶと、件数が合う', (await selCount(page)) === '2 件を選択中', await selCount(page));
+await rowCheck(page, 'T1').uncheck();
+check('チェックを外すと、件数が減る', (await selCount(page)) === '1 件を選択中');
+{
+  const det = await page.$eval('#detail', (e) => e.textContent);
+  await page.locator('.card--list', { hasText: 'T2' }).first().click({ position: { x: 6, y: 6 } });
+  check('行の余白のクリックで選択が切り替わり、詳細は変わらない', (await selectedTitles(page)).includes('T2') && (await page.$eval('#detail', (e) => e.textContent)) === det && (await selCount(page)) === '2 件を選択中', await selectedTitles(page));
+  await page.locator('.card--list', { hasText: 'T2' }).first().click({ position: { x: 6, y: 6 } });
+  check('もう一度クリックすると外れる', !(await selectedTitles(page)).includes('T2'));
+}
+await rowCheck(page, 'T3').check();
+await page.fill('#search-input', 'T3');
+check('選択は、検索で絞っても残り、表示外の件数が出る', (await selCount(page)) === '2 件を選択中(うち表示外 1 件)', await selCount(page));
+await page.fill('#search-input', '');
+check('検索を空に戻すと、表示外の表記が消える', (await selCount(page)) === '2 件を選択中');
+await page.click('#select-clear-btn');
+await page.fill('#search-input', 'T3');
+await page.fill('#search-input', '');
+await rowCheck(page, 'T0').check();
+await page.fill('#search-input', 'T3');
+await page.click('#select-visible-btn');
+await page.fill('#search-input', '');
+check('「表示中を全選択」は、表示中だけを足し、表示外の選択は残す', JSON.stringify((await selectedTitles(page)).sort()) === JSON.stringify(['T0', 'T3']) && (await selCount(page)) === '2 件を選択中', await selectedTitles(page));
+await page.click('#select-clear-btn');
+check('「選択を解除」で全部外れる', (await selCount(page)) === '0 件を選択中' && (await page.$$('.row-check:checked')).length === 0);
+await rowCheck(page, 'T0').check();
+await page.locator('.card--list', { hasText: 'T0' }).first().locator('[data-action="delete"]').click();
+check('選んだ行を削除すると、選択からも外れ、件数が減る', (await selCount(page)) === '0 件を選択中' && (await page.$$('.card--list')).length === 3);
+await page.keyboard.press('Escape');
+check('Escape で、選択モードは終わらない', !(await page.$eval('#select-bar', (e) => e.hidden)));
+await rowCheck(page, 'T1').check();
+await page.click('#select-end-btn');
+check('「終える」で、チェックとバーが消え、選択も消える', (await page.$$('.row-check')).length === 0 && (await page.$eval('#select-bar', (e) => e.hidden)));
+await page.click('#select-toggle-btn');
+check('もう一度入ると、選択は空', (await selCount(page)) === '0 件を選択中' && (await page.$$('.row-grip')).length === 0);
+await open(page, []);
+check('0 件のときは「選択」が押せない', await page.$eval('#select-toggle-btn', (e) => e.disabled));
+await open(page, [bm(0)]);
+await page.click('#select-toggle-btn');
+await page.locator('.card--list [data-action="delete"]').click();
+check('選択モード中に全件を削除すると、選択モードが終わる', (await page.$eval('#select-bar', (e) => e.hidden)) && (await page.$eval('#select-toggle-btn', (e) => e.disabled)));
+await open(page, selData());
+await page.click('#select-toggle-btn');
+for (const mode of ['tile', 'list']) {
+  await page.click('#layout-' + mode + '-btn');
+  for (const w of [1280, 400]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    const ok = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const vis = await page.$eval('.row-check', (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    check('選択モードで、' + mode + ' の幅 ' + w + 'px でも崩れない', ok && vis, { ok, vis });
+  }
+}
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.click('#layout-tile-btn');
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

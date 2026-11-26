@@ -204,7 +204,17 @@
   }
 
   /* タイル/リストの切り替え */
-  .list-toolbar .seg { margin-left: auto; }
+  .list-toolbar #select-toggle-btn { margin-left: auto; }
+  .list-toolbar #select-toggle-btn[aria-pressed="true"] { background: var(--amber); color: var(--amber-ink); }
+  .list-toolbar #select-toggle-btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* 選択モードの選択バー(件数表示の行の下。スクロールしても固定領域に残る) */
+  .select-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; padding: 8px 14px; border-radius: 999px; background: var(--amber); color: var(--amber-ink); font-size: 0.85rem; }
+  .select-bar[hidden] { display: none; }
+  .select-bar .btn-quiet { color: var(--amber-ink); background: rgba(255, 255, 255, 0.16); padding: 4px 12px; }
+  .select-bar .btn-quiet:hover { background: rgba(255, 255, 255, 0.28); }
+  .select-spacer { flex: 1 1 auto; }
+  .row-check { width: 17px; height: 17px; margin: 0; flex: 0 0 auto; accent-color: var(--amber); cursor: pointer; }
   .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); }
   .seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
   .seg button:hover { color: var(--ink); }
@@ -816,7 +826,7 @@
   }
   #bookmark-list.list-mode .row-pin { display: none; }
   #bookmark-list.list-mode .row-top, #bookmark-list.list-mode .row-foot { display: contents; }
-  #bookmark-list.list-mode .row-grip { grid-column: 1; }
+  #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .row-check { grid-column: 1; }
   #bookmark-list.list-mode .seal { grid-column: 2; width: 32px; height: 32px; border-radius: 10px; }
   #bookmark-list.list-mode .seal img, #bookmark-list.list-mode .seal svg { width: 18px; height: 18px; }
   #bookmark-list.list-mode .card--list .card-title { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -826,7 +836,7 @@
   #bookmark-list.list-mode .card--list .card-footer { grid-column: 6; margin-left: 0; }
   @container (max-width: 780px) {
     #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 140px) auto; row-gap: 2px; }
-    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 3; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .row-check, #bookmark-list.list-mode .seal { grid-row: 1 / 3; }
     #bookmark-list.list-mode .card--list .card-title { grid-column: 3; grid-row: 1; }
     #bookmark-list.list-mode .row-memo-preview { grid-column: 3; grid-row: 2; }
     #bookmark-list.list-mode .row-tags { grid-column: 4; grid-row: 1 / 3; }
@@ -834,7 +844,7 @@
   }
   @container (max-width: 460px) {
     #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) auto; }
-    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 4; }
+    #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .row-check, #bookmark-list.list-mode .seal { grid-row: 1 / 4; }
     #bookmark-list.list-mode .card--list .card-footer { grid-column: 4; grid-row: 1; }
     #bookmark-list.list-mode .row-memo-preview { grid-column: 3 / 5; grid-row: 2; }
     #bookmark-list.list-mode .row-tags { grid-column: 3 / 5; grid-row: 3; }
@@ -1122,10 +1132,18 @@
           <span id="filter-status-text"></span>
           <button type="button" class="btn-quiet" id="filter-clear-btn">解除 ×</button>
         </div>
+        <button type="button" class="btn-quiet" id="select-toggle-btn" aria-pressed="false">選択</button>
         <span class="seg" role="group" aria-label="表示の切り替え">
           <button type="button" id="layout-tile-btn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>タイル</button>
           <button type="button" id="layout-list-btn" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="3" rx="1.5"/><rect x="1" y="6.5" width="14" height="3" rx="1.5"/><rect x="1" y="11" width="14" height="3" rx="1.5"/></svg>リスト</button>
         </span>
+      </div>
+      <div class="select-bar" id="select-bar" hidden>
+        <span class="select-count" id="select-count" role="status"></span>
+        <button type="button" class="btn-quiet" id="select-visible-btn">表示中を全選択</button>
+        <button type="button" class="btn-quiet" id="select-clear-btn">選択を解除</button>
+        <span class="select-spacer"></span>
+        <button type="button" class="btn-quiet" id="select-end-btn">終える</button>
       </div>
     </div>
     <section class="list-section"><div class="list-grid" id="bookmark-list"></div></section>
@@ -1204,6 +1222,8 @@
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
     colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
+    selectMode: false,      // 一覧の選択モード(まとめて付け外しのために、行を選ぶ)。保存しない
+    selectedIds: {},        // 選択モードで選んだ行の id({ id: true })。検索・絞り込みを変えても残す。保存しない
     bulk: null,             // 管理モーダルの「付け外し」(チェックリスト)の途中の状態({ kind, name, isNew, sel: {id: true}, search })。開いていなければnull。保存しない
     manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
@@ -1778,8 +1798,57 @@
 
   /* ---------- レンダリング ---------- */
 
+  /* ---------- 選択モード(まとめて付け外しのために、行を選ぶ) ---------- */
+
+  function selectedIdList() {
+    return bookmarks.filter(function (b) { return state.selectedIds[b.id]; }).map(function (b) { return b.id; });
+  }
+  // 選ばれている行のうち、検索・絞り込みで、いま見えていない行の数
+  function selectedHiddenCount() {
+    var visible = Object.create(null);
+    getFiltered().forEach(function (b) { visible[b.id] = true; });
+    return selectedIdList().filter(function (id) { return !visible[id]; }).length;
+  }
+  // バーの文字・ボタンの状態を更新する(render() をしない軽い更新)
+  function renderSelectBar() {
+    var toggleBtn = document.getElementById('select-toggle-btn');
+    toggleBtn.disabled = bookmarks.length === 0;
+    toggleBtn.setAttribute('aria-pressed', String(state.selectMode));
+    document.getElementById('select-bar').hidden = !state.selectMode;
+    var hidden = selectedHiddenCount();
+    document.getElementById('select-count').textContent = selectedIdList().length + ' 件を選択中' + (hidden ? '(うち表示外 ' + hidden + ' 件)' : '');
+  }
+  function setSelected(id, on) {
+    if (on) state.selectedIds[id] = true; else delete state.selectedIds[id];
+    renderSelectBar();
+  }
+  document.getElementById('select-toggle-btn').addEventListener('click', function () {
+    state.selectMode = !state.selectMode;
+    render(); // 行のチェックボックスとグリップを切り替えるため、描き直す(固定領域の高さも同期される)
+  });
+  document.getElementById('select-end-btn').addEventListener('click', function () {
+    state.selectMode = false;
+    render();
+  });
+  document.getElementById('select-visible-btn').addEventListener('click', function () {
+    getFiltered().forEach(function (b) { state.selectedIds[b.id] = true; });
+    renderList(); // 表示中の行のチェックを反映する
+    renderSelectBar();
+  });
+  document.getElementById('select-clear-btn').addEventListener('click', function () {
+    state.selectedIds = {};
+    renderList();
+    renderSelectBar();
+  });
+
   function render() {
     pruneUnusedKeys();
+    // 選択: 削除などで無くなった行は外す。0 件になったら、選択モードを終える。選択モードでなければ、選択は持たない
+    if (bookmarks.length === 0) state.selectMode = false;
+    if (!state.selectMode) state.selectedIds = {};
+    Object.keys(state.selectedIds).forEach(function (id) {
+      if (!bookmarks.some(function (b) { return b.id === id; })) delete state.selectedIds[id];
+    });
     // 絞り込み中のタグが無くなった(改名・削除・統合・編集で消えた)ら、絞り込みを外す
     if (state.filterTag !== null && !getTags().some(function (t) { return t.key === state.filterTag; })) state.filterTag = null;
     if (state.filterUntagged && countUntagged() === 0) state.filterUntagged = false;
@@ -1800,6 +1869,7 @@
     // グループの入力欄(追加・編集)の候補は、既存のグループの名前
     document.getElementById('group-options').innerHTML = getGroups().map(function (g) { return '<option value="' + escapeHtml(g.name) + '">'; }).join('');
     if (!tagManageOverlay.hidden) renderTagManageModal(); // モーダルが開いている間は常に最新の件数を反映する
+    renderSelectBar();
 
     syncHeaderHeight();
   }
@@ -2016,7 +2086,7 @@
 
   // カードのドラッグ並べ替えは、検索中でないときだけ有効にする(グループ・タグの絞り込み中は有効)
   function canReorder() {
-    return getSearchTokens().length === 0;
+    return getSearchTokens().length === 0 && !state.selectMode; // 選択モード中は、行の取り違えを防ぐため、並べ替えを止める
   }
 
   // グループごとの区画。区画の順はグループ管理で決めた順(getGroups)。各行は、入っているグループ(groupName)の区画に1回だけ出す。グループなしは最後。
@@ -2231,10 +2301,19 @@
       var copyPwBtn = card.querySelector('[data-action="copy-login-password"]');
       if (copyPwBtn) copyPwBtn.addEventListener('click', function () { copyToClipboard(b.loginPassword, copyPwBtn); });
 
+      var rowCheckBox = card.querySelector('.row-check');
+      if (rowCheckBox) rowCheckBox.addEventListener('change', function () { setSelected(b.id, rowCheckBox.checked); });
+
       // 行の余白をクリックすると詳細を選ぶ(開くのはタイトルの文字。ボタン・リンク・入力欄は各自の動作を優先)
       card.addEventListener('click', function (e) {
         if (e.target.closest('a, button, input, label, .row-grip')) return;
         if (String(window.getSelection()).length) return; // 文字の選択操作(メモのコピー等)では選ばない
+        if (state.selectMode) { // 選択モードでは、余白のクリックは、その行の選択の切り替え(詳細は選ばない)
+          var rowCheck = card.querySelector('.row-check');
+          setSelected(b.id, !state.selectedIds[b.id]);
+          if (rowCheck) rowCheck.checked = !!state.selectedIds[b.id];
+          return;
+        }
         state.selectedId = b.id;
         Array.prototype.forEach.call(container.querySelectorAll('.card[aria-current]'), function (c) { c.removeAttribute('aria-current'); });
         Array.prototype.forEach.call(container.querySelectorAll('.card[data-card-id="' + CSS.escape(b.id) + '"]'), function (c) { c.setAttribute('aria-current', 'true'); });
@@ -2942,6 +3021,9 @@
     var tokens = getSearchTokens();
     var iconHtml = resolveIconHtml(b);
     var grip = reorderable ? '<span class="row-grip" aria-hidden="true">&#8942;&#8942;</span>' : '';
+    var check = state.selectMode
+      ? '<input type="checkbox" class="row-check" aria-label="' + escapeHtml(b.title) + 'を選ぶ"' + (state.selectedIds[b.id] ? ' checked' : '') + '>'
+      : '';
 
     var sub = subLine(b, tokens);
     var memoPreviewHtml = sub ? '<div class="row-memo-preview">' + sub + '</div>' : '';
@@ -2966,6 +3048,7 @@
       '<article class="card card--list" data-card-id="' + escapeHtml(b.id) + '" tabindex="-1"' + (b.id === state.selectedId ? ' aria-current="true"' : '') + '>' +
         '<span class="row-pin" aria-hidden="true">' + ICONS.pin + '</span>' +
         '<div class="row-top">' +
+          check +
           grip +
           '<div class="seal">' + iconHtml + '</div>' +
           '<h3 class="card-title"><a href="' + escapeHtml(resolveOpenHref(b)) + '" target="_blank" rel="noopener noreferrer" tabindex="-1">' + highlightText(b.title, tokens) + '</a></h3>' +
