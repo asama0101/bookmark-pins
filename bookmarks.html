@@ -559,6 +559,25 @@
     background: var(--ivory);
   }
   .tag-manage-row .btn-quiet, .tag-manage-row .btn-danger { padding: 3px 12px; font-size: 0.8rem; }
+
+  /* 「付け外し」のチェックリスト(管理モーダルの本体を置き換える) */
+  #tag-manage-list[hidden], .bulk-picker[hidden] { display: none; }
+  .bulk-picker { display: flex; flex-direction: column; gap: 10px; }
+  .bulk-title { margin: 0; font-size: 1rem; }
+  .bulk-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bulk-search { flex: 1 1 160px; min-width: 0; border: 1px solid rgba(40, 60, 90, 0.18); border-radius: 999px; padding: 7px 14px; font: inherit; font-size: 0.9rem; background: var(--card); color: var(--ink); }
+  .bulk-list { display: flex; flex-direction: column; max-height: 320px; overflow-y: auto; border: 1px solid rgba(40, 60, 90, 0.14); border-radius: 14px; padding: 4px; background: var(--card); }
+  .bulk-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; cursor: pointer; font-size: 0.9rem; }
+  .bulk-row:hover { background: var(--ivory); }
+  .bulk-row input { width: 17px; height: 17px; accent-color: var(--amber); flex: 0 0 auto; }
+  .bulk-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bulk-mark { flex: 0 0 auto; font-size: 0.75rem; font-weight: 600; }
+  .bulk-mark.add { color: #2f7a55; }
+  .bulk-mark.del { color: #a14a4a; }
+  .bulk-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .bulk-summary { flex: 1 1 auto; font-size: 0.85rem; color: var(--ink-soft); }
+  .bulk-result { margin: 0; font-size: 0.85rem; color: #2f7a55; }
+  .bulk-result:empty { display: none; }
   .tag-manage-row { flex-wrap: wrap; }
   .tag-color-btn, .tag-color-swatch {
     width: 20px; height: 20px; flex: none; padding: 0; border-radius: 50%; cursor: pointer;
@@ -1125,6 +1144,21 @@
     <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
     <p class="tag-manage-empty" id="tag-manage-empty" hidden>タグがありません。ブックマークにタグを付けると、ここに表示されます。</p>
+    <p class="bulk-result" id="bulk-result" role="status"></p>
+    <div class="bulk-picker" id="bulk-picker" hidden>
+      <h3 class="bulk-title" id="bulk-title"></h3>
+      <div class="bulk-tools">
+        <input type="text" id="bulk-search" class="bulk-search" placeholder="タイトルで検索..." aria-label="タイトルで検索" autocomplete="off">
+        <button type="button" class="btn-quiet" id="bulk-all">表示中を全選択</button>
+        <button type="button" class="btn-quiet" id="bulk-none">表示中を全解除</button>
+      </div>
+      <div class="bulk-list" id="bulk-list"></div>
+      <div class="bulk-foot">
+        <span class="bulk-summary" id="bulk-summary"></span>
+        <button type="button" class="btn-quiet" id="bulk-cancel">キャンセル</button>
+        <button type="button" class="btn btn-amber" id="bulk-apply">適用</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1158,6 +1192,7 @@
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
     colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
+    bulk: null,             // 管理モーダルの「付け外し」(チェックリスト)の途中の状態({ kind, name, isNew, sel: {id: true}, search })。開いていなければnull。保存しない
     manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
@@ -1634,6 +1669,43 @@
     var k = tagKey(name.trim());
     var existing = getTags().filter(function (t) { return t.key === k; })[0];
     return existing ? existing.name : name.trim();
+  }
+
+  /* ---------- まとめての付け外し(核) ---------- */
+
+  // kind('tag' か 'group')・名前 name の付け外しの計画。addIds・removeIds のうち、実際に変わる件だけを数える。
+  // 名前は前後の空白を除き、既存の表記に合わせる。isNew は、その名前が、どの件にも付いていないとき真
+  function planMembership(kind, name, addIds, removeIds) {
+    var canon = kind === 'tag' ? canonicalTag(name) : '';
+    var plan = { kind: kind, name: canon, isNew: false, add: [], remove: [], moves: [] };
+    if (!canon) return plan;
+    var byId = Object.create(null);
+    bookmarks.forEach(function (b) { byId[b.id] = b; });
+    plan.isNew = !bookmarks.some(function (b) { return hasTag(b.tags, canon); });
+    addIds.forEach(function (id) { if (byId[id] && !hasTag(byId[id].tags, canon)) plan.add.push(id); });
+    removeIds.forEach(function (id) { if (byId[id] && hasTag(byId[id].tags, canon)) plan.remove.push(id); });
+    return plan;
+  }
+
+  // 計画を適用する。保存して、再描画する
+  function applyPlan(plan) {
+    var byId = Object.create(null);
+    bookmarks.forEach(function (b) { byId[b.id] = b; });
+    plan.add.forEach(function (id) { if (byId[id]) addTagTo(byId[id].tags, plan.name); });
+    plan.remove.forEach(function (id) {
+      if (byId[id]) byId[id].tags = byId[id].tags.filter(function (t) { return tagKey(t) !== tagKey(plan.name); });
+    });
+    saveData(bookmarks);
+    render();
+  }
+
+  // 計画の説明文。変わる件が無ければ ''。past が真なら、適用したあとの言い方
+  function describePlan(plan, past) {
+    var parts = [];
+    if (plan.add.length) parts.push(plan.add.length + ' 件に付け');
+    if (plan.remove.length) parts.push(plan.remove.length + ' 件から外し');
+    if (!parts.length) return '';
+    return (plan.isNew ? '(新規) ' : '') + '「' + plan.name + '」を ' + parts.join('、') + (past ? 'ました' : 'ます');
   }
 
   /* ---------- フィルタ・ソート(タグの絞り込み + 検索) ---------- */
@@ -2147,6 +2219,8 @@
 
   function openTagManageModal() {
     state.manageTab = 'group';
+    state.bulk = null;
+    bulkResult.textContent = '';
     tagManageOverlay.hidden = false;
     renderTagManageModal();
     var firstBtn = tagManageList.querySelector('button');
@@ -2160,6 +2234,7 @@
     state.confirmRename = null;
     state.renameDraft = null;
     state.colorEditing = null;
+    state.bulk = null;
     tagManageOpenBtn.focus(); // 開いた場所へフォーカスを戻す
   }
 
@@ -2188,7 +2263,121 @@
         onDrop: moveGroup
       });
     });
+    renderBulkPicker();
   }
+
+  /* ---------- 「付け外し」のチェックリスト(管理モーダル) ---------- */
+
+  var bulkResult = document.getElementById('bulk-result');
+  var bulkPicker = document.getElementById('bulk-picker');
+  var bulkSearch = document.getElementById('bulk-search');
+  var bulkList = document.getElementById('bulk-list');
+  var bulkSummary = document.getElementById('bulk-summary');
+  var bulkApply = document.getElementById('bulk-apply');
+
+  // 検索の語(空白区切り。すべてを含む)にタイトルが合うブックマーク(順は一覧と同じ)
+  function bulkVisible() {
+    var tokens = state.bulk.search.toLowerCase().split(/[\s\u3000]+/).filter(Boolean);
+    return sortItems(bookmarks).filter(function (b) {
+      var t = b.title.toLowerCase();
+      return tokens.every(function (w) { return t.indexOf(w) !== -1; });
+    });
+  }
+
+  // いまのチェックから作る計画(チェックした件=付ける、していない件=外す)
+  function bulkPlan() {
+    var on = [], off = [];
+    bookmarks.forEach(function (b) { (state.bulk.sel[b.id] ? on : off).push(b.id); });
+    return planMembership(state.bulk.kind, state.bulk.name, on, off);
+  }
+
+  // 要約と、各行の「付く/外れる」の印を更新する(検索欄・リストの作り直しはしない)
+  function renderBulkSummary() {
+    var plan = bulkPlan();
+    var text = describePlan(plan, false);
+    var adding = Object.create(null), removing = Object.create(null);
+    plan.add.forEach(function (id) { adding[id] = true; });
+    plan.remove.forEach(function (id) { removing[id] = true; });
+    bulkSummary.textContent = text || '変更はありません';
+    bulkApply.disabled = !text;
+    Array.prototype.forEach.call(bulkList.querySelectorAll('.bulk-row'), function (row) {
+      var id = row.getAttribute('data-id');
+      var mark = row.querySelector('.bulk-mark');
+      if (adding[id]) { mark.className = 'bulk-mark add'; mark.textContent = '＋ 付く'; }
+      else if (removing[id]) { mark.className = 'bulk-mark del'; mark.textContent = '− 外れる'; }
+      else { mark.className = 'bulk-mark'; mark.textContent = ''; }
+    });
+  }
+
+  function renderBulkList() {
+    bulkList.innerHTML = bulkVisible().map(function (b) {
+      return '<label class="bulk-row" data-id="' + escapeHtml(b.id) + '"><input type="checkbox" data-id="' + escapeHtml(b.id) + '"' + (state.bulk.sel[b.id] ? ' checked' : '') + '>' +
+        '<span class="bulk-t">' + escapeHtml(b.title) + '</span><span class="bulk-mark"></span></label>';
+    }).join('') || '<p class="tag-manage-empty">該当がありません。</p>';
+    renderBulkSummary();
+  }
+
+  // モーダルの本体(ヒント・一覧)を、state.bulk があるときだけチェックリストの画面に替える。タブは見せたまま
+  function renderBulkPicker() {
+    var open = state.bulk !== null;
+    bulkPicker.hidden = !open;
+    bulkResult.hidden = open;
+    document.getElementById('tag-manage-hint').hidden = open;
+    tagManageList.hidden = open;
+    if (!open) { bulkList.removeAttribute('data-for'); return; }
+    tagManageEmpty.hidden = true;
+    document.getElementById('bulk-title').textContent = (state.bulk.kind === 'group' ? 'グループ' : 'タグ') + '「' + state.bulk.name + '」を付ける対象';
+    // 開いた直後だけ、検索欄とリストを作る。再描画(件数の更新など)では、検索欄の入力・フォーカスを守る
+    var stamp = state.bulk.kind + ':' + state.bulk.name;
+    if (bulkList.getAttribute('data-for') !== stamp) {
+      bulkList.setAttribute('data-for', stamp);
+      bulkSearch.value = state.bulk.search;
+      renderBulkList();
+    }
+  }
+
+  function openBulk(key) {
+    var item = (state.manageTab === 'group' ? getGroups() : getTags()).filter(function (t) { return t.key === key; })[0];
+    if (!item) return;
+    var sel = {};
+    bookmarks.forEach(function (b) { if (hasTag(b.tags, item.name)) sel[b.id] = true; });
+    state.bulk = { kind: 'tag', name: item.name, isNew: false, sel: sel, search: '' };
+    bulkResult.textContent = '';
+    renderTagManageModal();
+  }
+
+  bulkList.addEventListener('change', function (e) {
+    var box = e.target.closest('input[data-id]');
+    if (!box || !state.bulk) return;
+    if (box.checked) state.bulk.sel[box.getAttribute('data-id')] = true; else delete state.bulk.sel[box.getAttribute('data-id')];
+    renderBulkSummary();
+  });
+  bulkSearch.addEventListener('input', function () {
+    if (!state.bulk) return;
+    state.bulk.search = bulkSearch.value;
+    renderBulkList();
+  });
+  document.getElementById('bulk-all').addEventListener('click', function () {
+    bulkVisible().forEach(function (b) { state.bulk.sel[b.id] = true; });
+    renderBulkList();
+  });
+  document.getElementById('bulk-none').addEventListener('click', function () {
+    bulkVisible().forEach(function (b) { delete state.bulk.sel[b.id]; });
+    renderBulkList();
+  });
+  document.getElementById('bulk-cancel').addEventListener('click', function () {
+    state.bulk = null;
+    renderTagManageModal();
+  });
+  bulkApply.addEventListener('click', function () {
+    if (!state.bulk) return;
+    var plan = bulkPlan();
+    var text = describePlan(plan, true);
+    if (!text) return;
+    state.bulk = null;
+    bulkResult.textContent = text;
+    applyPlan(plan); // 保存して render() する(モーダルは、一覧の画面で描き直される)
+  });
 
   // 改名の入力の行(タグ・グループ共通)
   function renderRenameFormRow(key, name) {
@@ -2222,6 +2411,7 @@
       '<button type="button" class="tag-color-btn" data-action="toggle-tag-color" data-tag="' + key + '" style="--h:' + tagHue(t.key) + '" aria-label="' + name + 'の色を選ぶ" aria-expanded="' + picking + '"></button>' +
       '<span class="tag-manage-name">' + name + '</span>' +
       '<span class="tag-manage-count">' + t.count + '</span>' +
+      '<button type="button" class="btn-quiet" data-action="bulk-open" data-tag="' + key + '" aria-label="' + name + 'を付ける対象を選ぶ">付け外し</button>' +
       manageActionButtons(t) +
       (picking ? renderTagColorPicker(t) : '') +
     '</li>';
@@ -2288,6 +2478,8 @@
     var tab = e.target.closest('[data-manage-tab]');
     if (!tab) return;
     state.manageTab = tab.getAttribute('data-manage-tab');
+    state.bulk = null;
+    bulkResult.textContent = '';
     state.editingTag = null;
     state.confirmDeleteTag = null;
     state.confirmRename = null;
@@ -2301,6 +2493,7 @@
     if (!btn) return;
     var action = btn.getAttribute('data-action');
     var key = btn.getAttribute('data-tag');
+    if (action === 'bulk-open') { openBulk(key); return; }
     if (action === 'edit-tag') {
       state.editingTag = key;
       state.confirmDeleteTag = null;
@@ -3136,6 +3329,11 @@
 
     // タグ管理モーダルが開いている場合、内側の改名の確認→改名・削除の確認→モーダル本体の順に1段階ずつ閉じる
     if (!tagManageOverlay.hidden) {
+      if (state.bulk !== null) {
+        state.bulk = null; // 「付け外し」のチェックリストだけを閉じて、一覧の画面に戻る
+        renderTagManageModal();
+        return;
+      }
       if (state.confirmRename !== null) {
         state.confirmRename = null; // 改名の入力に戻る
         renderTagManageModal();
