@@ -927,6 +927,378 @@ await open(page, [bm(0, { title: 'ログインのある行', loginId: 'u', login
 await page.click('#layout-list-btn');
 check('リストは、操作アイコンが5個でも、タイトルが 120px 以上', (await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width))) >= 120, await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width)));
 
+// ===== まとめて付け外し(B: 管理モーダルのチェックリスト) =====
+await page.setViewportSize({ width: 1280, height: 720 });
+const openManage = async (p, tab) => { await p.click('#tag-manage-open-btn'); await p.click('[data-manage-tab="' + tab + '"]'); };
+const bulkStored = (p) => p.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_data')));
+const checkedIds = (p) => p.$$eval('#bulk-list input[type=checkbox]:checked', (els) => els.map((e) => e.dataset.id));
+const bulkData = () => [bm(0, { tags: ['仕事'] }), bm(1, { tags: ['仕事'] }), bm(2), bm(3)];
+const bulkOpen = (p, key) => p.click('[data-action="bulk-open"][data-tag="' + key + '"]');
+const toggleId = (p, id) => p.click('#bulk-list input[data-id="' + id + '"]');
+await open(page, bulkData());
+await openManage(page, 'tag');
+await bulkOpen(page, '仕事');
+check('タグの行に「付け外し」があり、開くと付いている件だけがオン', JSON.stringify(await checkedIds(page)) === JSON.stringify(['i0', 'i1']) && (await page.$$('#bulk-list input[type=checkbox]')).length === 4 && !(await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#tag-manage-list', (e) => e.hidden || getComputedStyle(e).display === 'none')), await checkedIds(page));
+const dataOpened = JSON.stringify(await bulkStored(page));
+check('チェックを変えるまで、要約は 0 で適用できない', (await page.$eval('#bulk-apply', (e) => e.disabled)) && JSON.stringify(await bulkStored(page)) === dataOpened);
+await toggleId(page, 'i2'); await toggleId(page, 'i3'); await toggleId(page, 'i0');
+check('要約は、実際に変わる件だけを数える', (await page.$eval('#bulk-summary', (e) => e.textContent)).includes('「仕事」を 2 件に付け、1 件から外します'), await page.$eval('#bulk-summary', (e) => e.textContent));
+check('適用するまで、データは変わらない', JSON.stringify(await bulkStored(page)) === dataOpened);
+await page.click('#bulk-apply');
+const afterApply = await bulkStored(page);
+const tagsOf = (d, id) => JSON.stringify(d.find((b) => b.id === id).tags);
+check('適用すると、チェックしたとおりになり、ほかは変わらない', tagsOf(afterApply, 'i0') === '[]' && tagsOf(afterApply, 'i1') === '["仕事"]' && tagsOf(afterApply, 'i2') === '["仕事"]' && tagsOf(afterApply, 'i3') === '["仕事"]' && afterApply.every((b, i) => b.title === 'T' + i && b.order === i), afterApply);
+check('適用後は一覧の画面に戻り、結果が出る', (await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#bulk-result', (e) => e.textContent)).includes('「仕事」を 2 件に付け、1 件から外しました'));
+{
+  const before = JSON.parse(dataOpened), changed = afterApply.filter((b, i) => JSON.stringify(b.tags) !== JSON.stringify(before[i].tags)).length;
+  check('要約の件数と、実際に変わった件数が一致する', changed === 3, changed);
+}
+await bulkOpen(page, '仕事');
+await toggleId(page, 'i1');
+await page.click('#bulk-cancel');
+check('キャンセルで何も変わらない', JSON.stringify(await bulkStored(page)) === JSON.stringify(afterApply) && (await page.$eval('#bulk-picker', (e) => e.hidden)));
+await bulkOpen(page, '仕事');
+await page.keyboard.press('Escape');
+check('Escape で、チェックリストだけが閉じる(モーダルは開いたまま)', (await page.$eval('#bulk-picker', (e) => e.hidden)) && !(await page.$eval('#tag-manage-overlay', (e) => e.hidden)));
+await bulkOpen(page, '仕事');
+await page.click('[data-manage-tab="group"]');
+check('タブを替えると、チェックリストは閉じる', await page.$eval('#bulk-picker', (e) => e.hidden));
+await page.click('[data-manage-tab="tag"]');
+await bulkOpen(page, '仕事');
+await page.type('#bulk-search', 'T1', { delay: 20 });
+check('検索の入力中に、再描画されても、入力とフォーカスが残る', (await page.$eval('#bulk-search', (e) => e.value)) === 'T1' && (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'bulk-search');
+await page.click('#bulk-none');
+await page.fill('#bulk-search', '');
+await page.click('#bulk-all');
+check('「表示中を全選択」は、表示中だけをオンにする(検索で絞った分)', (await checkedIds(page)).length === 4);
+await page.fill('#bulk-search', 'T1');
+await page.click('#bulk-none');
+await page.fill('#bulk-search', '');
+check('「表示中を全解除」は、表示中だけをオフにする', JSON.stringify(await checkedIds(page)) === JSON.stringify(['i0', 'i2', 'i3']), await checkedIds(page));
+await page.click('#bulk-cancel');
+await open(page, bulkData());
+await openManage(page, 'tag');
+await bulkOpen(page, '仕事');
+await toggleId(page, 'i0'); await toggleId(page, 'i1');
+await page.click('#bulk-apply');
+check('全件から外すと、タグの行が消えて一覧の画面に戻る', (await page.$$('#tag-manage-list [data-tag="仕事"]')).length === 0 && (await page.$eval('#bulk-result', (e) => e.textContent)).includes('2 件から外しました'));
+await open(page, Array.from({ length: 500 }, (_, i) => bm(i, i === 0 ? { tags: ['x'] } : {})));
+await openManage(page, 'tag');
+await bulkOpen(page, 'x');
+const t500 = Date.now();
+await page.click('#bulk-all');
+await page.click('#bulk-apply');
+await page.waitForSelector('#bulk-picker', { state: 'hidden' });
+check('500 件でも、全選択と適用が 2 秒以内', Date.now() - t500 <= 2000 && (await bulkStored(page)).every((b) => b.tags.includes('x')), Date.now() - t500);
+
+// ----- グループ(B) -----
+const groupData = () => [bm(0, { groupName: '社内' }), bm(1, { groupName: '社内' }), bm(2, { groupName: '個人' }), bm(3)];
+const groupOf = (d, id) => d.find((b) => b.id === id).groupName;
+await open(page, groupData());
+await openManage(page, 'group');
+await bulkOpen(page, '社内');
+check('グループの行の「付け外し」で、そのグループの件だけがオン', JSON.stringify(await checkedIds(page)) === JSON.stringify(['i0', 'i1']), await checkedIds(page));
+await toggleId(page, 'i2');
+const moveNote = await page.$eval('#bulk-list .bulk-row[data-id="i2"]', (e) => e.textContent);
+const sumMove = await page.$eval('#bulk-summary', (e) => e.textContent);
+await toggleId(page, 'i3');
+const sumMove2 = await page.$eval('#bulk-summary', (e) => e.textContent);
+check('別のグループの件をオンにすると、注記と「移る」の件数が出る(グループなしは移るに数えない)', moveNote.includes('「個人」から移る') && sumMove.includes('うち 1 件は、別のグループから移ります') && sumMove2.includes('「社内」を 2 件に付けます') && sumMove2.includes('うち 1 件は、別のグループから移ります'), { moveNote, sumMove, sumMove2 });
+await toggleId(page, 'i0');
+const gBefore = JSON.stringify(await bulkStored(page));
+await page.click('#bulk-apply');
+const gAfter = await bulkStored(page);
+check('適用すると、groupName が置き換わり、ほかのフィールドは変わらない', groupOf(gAfter, 'i0') === '' && groupOf(gAfter, 'i1') === '社内' && groupOf(gAfter, 'i2') === '社内' && groupOf(gAfter, 'i3') === '社内' && gAfter.every((b, i) => b.order === i && JSON.stringify(b.tags) === '[]' && b.title === 'T' + i), gAfter);
+check('適用後、移った件の区画が替わる', (await page.$$('.tag-group[data-group="個人"]')).length === 0 && (await page.$$('.tag-group[data-group="社内"] .card--list')).length === 3);
+await open(page, groupData());
+await openManage(page, 'group');
+await bulkOpen(page, '社内');
+await toggleId(page, 'i0'); await toggleId(page, 'i1');
+await page.click('#bulk-apply');
+const gOff = await bulkStored(page);
+check('オフにしても、別のグループの件には影響せず、外した件はグループなしになる', groupOf(gOff, 'i0') === '' && groupOf(gOff, 'i1') === '' && groupOf(gOff, 'i2') === '個人' && groupOf(gOff, 'i3') === '', gOff.map((b) => b.groupName));
+check('グループを全件から外すと、区画が消え、管理の行も消える', (await page.$$('.tag-group[data-group="社内"]')).length === 0 && (await page.$$('#tag-manage-list [data-tag="社内"]')).length === 0);
+await open(page, [bm(0, { groupName: 'Work' }), bm(1), bm(2, { groupName: 'work' })]);
+await openManage(page, 'group');
+await bulkOpen(page, 'work');
+await toggleId(page, 'i1');
+await page.click('#bulk-apply');
+check('グループ名の表記は、既存に合わせる', JSON.stringify((await bulkStored(page)).map((b) => b.groupName)) === JSON.stringify(['Work', 'Work', 'Work']), (await bulkStored(page)).map((b) => b.groupName));
+
+// ----- 新しく作って付ける・区切り文字の検査・編集下書きの同期 -----
+const newName = async (p, name) => { await p.fill('#bulk-new-input', name); await p.click('#bulk-new-btn'); };
+await open(page, bulkData());
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+check('新しく作って付ける(タグ): 見出しに(新規)、オンの件は0', (await page.$eval('#bulk-title', (e) => e.textContent)).includes('(新規)') && (await checkedIds(page)).length === 0);
+await toggleId(page, 'i2'); await toggleId(page, 'i3');
+check('新規の要約は「(新規) 「…」を N 件に付けます」', (await page.$eval('#bulk-summary', (e) => e.textContent)) === '(新規) 「新規タグ」を 2 件に付けます', await page.$eval('#bulk-summary', (e) => e.textContent));
+await page.click('#bulk-apply');
+{
+  const d = await bulkStored(page);
+  check('新規のタグが、選んだ件に付き、色は自動のまま、管理に行が出る', tagsOf(d, 'i2') === '["新規タグ"]' && tagsOf(d, 'i3') === '["新規タグ"]' && tagsOf(d, 'i0') === '["仕事"]' && ['null', '{}'].includes(JSON.stringify(await page.evaluate(() => localStorage.getItem('bookmarks_tag_colors')) === null ? null : await page.evaluate(() => JSON.parse(localStorage.getItem('bookmarks_tag_colors'))))) && (await page.$$('#tag-manage-list li.tag-manage-row[data-tag="新規タグ"]')).length === 1, d);
+}
+await open(page, [bm(0, { tags: ['Work'] }), bm(1)]);
+await openManage(page, 'tag');
+await newName(page, 'work');
+check('既存と比較で同じ名前は、既存の付け外しを開く(新規でない)', (await page.$eval('#bulk-title', (e) => e.textContent)).includes('Work') && !(await page.$eval('#bulk-title', (e) => e.textContent)).includes('(新規)') && JSON.stringify(await checkedIds(page)) === JSON.stringify(['i0']), await page.$eval('#bulk-title', (e) => e.textContent));
+await page.click('#bulk-cancel');
+for (const bad of ['a,b', 'a，b', 'a、b', '', '   ']) {
+  await newName(page, bad);
+  check('新しいタグ名の拒否: ' + JSON.stringify(bad), (await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#bulk-new-error', (e) => e.textContent.trim().length > 0)), bad);
+}
+await newName(page, 'ok');
+check('正しい名前を入れ直すと、エラーが消えて開く', !(await page.$eval('#bulk-picker', (e) => e.hidden)) && (await page.$eval('#bulk-new-error', (e) => e.textContent.trim())) === '');
+await page.click('#bulk-cancel');
+await open(page, [bm(0, { tags: ['x,y'] }), bm(1)]);
+await openManage(page, 'tag');
+await bulkOpen(page, 'x,y');
+await toggleId(page, 'i1');
+await page.click('#bulk-apply');
+check('区切り文字を含む既存のタグは、付け外しできる', tagsOf(await bulkStored(page), 'i1') === '["x,y"]', await bulkStored(page));
+await open(page, groupData());
+await openManage(page, 'group');
+await newName(page, 'a,b');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+check('カンマを含む新しいグループ名は受け付ける', groupOf(await bulkStored(page), 'i0') === 'a,b', (await bulkStored(page)).map((b) => b.groupName));
+// 編集中の下書き
+await open(page, bulkData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-memo', 'draft');
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('編集中の件を変更すると、フォームのタグが新しくなり、入力中のメモは残る', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('新規タグ') && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft', await page.$eval('#edit-tag-chips', (e) => e.textContent));
+await page.click('[data-edit-form] button[type=submit]');
+{
+  const d = await bulkStored(page);
+  check('あとで保存しても、まとめての変更は消えず、メモも保存される', tagsOf(d, 'i0').includes('新規タグ') && tagsOf(d, 'i0').includes('仕事') && d.find((b) => b.id === 'i0').memo === 'draft', d.find((b) => b.id === 'i0'));
+}
+await open(page, groupData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-memo', 'draft2');
+await openManage(page, 'group');
+await newName(page, '新規グループ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('グループも、編集フォームの下書きに反映され、メモは残る', (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === '新規グループ' && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft2');
+await page.click('[data-edit-form] button[type=submit]');
+check('保存後も、グループの変更が残る', groupOf(await bulkStored(page), 'i0') === '新規グループ');
+await open(page, bulkData());
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await openManage(page, 'tag');
+await newName(page, '新規タグ');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('下書きが無い(開いただけ)でも、フォームが新しい値で描かれる', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('新規タグ'));
+
+// ===== 選択モード(A) =====
+await page.setViewportSize({ width: 1280, height: 720 });
+const selData = () => [bm(0, { groupName: 'g1' }), bm(1, { groupName: 'g1' }), bm(2, { groupName: 'g1' }), bm(3, { groupName: 'g2' })];
+const selCount = (p) => p.$eval('#select-count', (e) => e.textContent.trim());
+const rowCheck = (p, t) => p.locator('.card--list', { hasText: t }).first().locator('.row-check');
+const selectedTitles = (p) => p.$$eval('.row-check:checked', (els) => els.map((e) => e.closest('.card').querySelector('.card-title').textContent));
+await open(page, selData());
+check('選択モードでないとき、通常の行は変わらない(チェックなし・グリップあり)', (await page.$$('.row-check')).length === 0 && (await page.$$('.row-grip')).length === 4 && (await page.$eval('#select-bar', (e) => e.hidden)));
+await page.click('#select-toggle-btn');
+check('「選択」を押すと、行にチェックボックスとバーが出る', (await page.$$('.row-check')).length === 4 && !(await page.$eval('#select-bar', (e) => e.hidden)) && (await page.$eval('#select-toggle-btn', (e) => e.getAttribute('aria-pressed'))) === 'true');
+check('選択モード中は、ドラッグが止まる(グリップなし・draggable なし)', (await page.$$('.row-grip')).length === 0 && (await page.$$('.card--list[draggable="true"]')).length === 0);
+await rowCheck(page, 'T0').check(); await rowCheck(page, 'T1').check();
+check('チェックで選ぶと、件数が合う', (await selCount(page)) === '2 件を選択中', await selCount(page));
+await rowCheck(page, 'T1').uncheck();
+check('チェックを外すと、件数が減る', (await selCount(page)) === '1 件を選択中');
+{
+  const det = await page.$eval('#detail', (e) => e.textContent);
+  await page.locator('.card--list', { hasText: 'T2' }).first().click({ position: { x: 6, y: 6 } });
+  check('行の余白のクリックで選択が切り替わり、詳細は変わらない', (await selectedTitles(page)).includes('T2') && (await page.$eval('#detail', (e) => e.textContent)) === det && (await selCount(page)) === '2 件を選択中', await selectedTitles(page));
+  await page.locator('.card--list', { hasText: 'T2' }).first().click({ position: { x: 6, y: 6 } });
+  check('もう一度クリックすると外れる', !(await selectedTitles(page)).includes('T2'));
+}
+await rowCheck(page, 'T3').check();
+await page.fill('#search-input', 'T3');
+check('選択は、検索で絞っても残り、表示外の件数が出る', (await selCount(page)) === '2 件を選択中(うち表示外 1 件)', await selCount(page));
+await page.fill('#search-input', '');
+check('検索を空に戻すと、表示外の表記が消える', (await selCount(page)) === '2 件を選択中');
+await page.click('#select-clear-btn');
+await page.fill('#search-input', 'T3');
+await page.fill('#search-input', '');
+await rowCheck(page, 'T0').check();
+await page.fill('#search-input', 'T3');
+await page.click('#select-visible-btn');
+await page.fill('#search-input', '');
+check('「表示中を全選択」は、表示中だけを足し、表示外の選択は残す', JSON.stringify((await selectedTitles(page)).sort()) === JSON.stringify(['T0', 'T3']) && (await selCount(page)) === '2 件を選択中', await selectedTitles(page));
+await page.click('#select-clear-btn');
+check('「選択を解除」で全部外れる', (await selCount(page)) === '0 件を選択中' && (await page.$$('.row-check:checked')).length === 0);
+await rowCheck(page, 'T0').check();
+await page.locator('.card--list', { hasText: 'T0' }).first().locator('[data-action="delete"]').click();
+check('選んだ行を削除すると、選択からも外れ、件数が減る', (await selCount(page)) === '0 件を選択中' && (await page.$$('.card--list')).length === 3);
+await page.keyboard.press('Escape');
+check('Escape で、選択モードは終わらない', !(await page.$eval('#select-bar', (e) => e.hidden)));
+await rowCheck(page, 'T1').check();
+await page.click('#select-end-btn');
+check('「終える」で、チェックとバーが消え、選択も消える', (await page.$$('.row-check')).length === 0 && (await page.$eval('#select-bar', (e) => e.hidden)));
+await page.click('#select-toggle-btn');
+check('もう一度入ると、選択は空', (await selCount(page)) === '0 件を選択中' && (await page.$$('.row-grip')).length === 0);
+await open(page, []);
+check('0 件のときは「選択」が押せない', await page.$eval('#select-toggle-btn', (e) => e.disabled));
+await open(page, [bm(0)]);
+await page.click('#select-toggle-btn');
+await page.locator('.card--list [data-action="delete"]').click();
+check('選択モード中に全件を削除すると、選択モードが終わる', (await page.$eval('#select-bar', (e) => e.hidden)) && (await page.$eval('#select-toggle-btn', (e) => e.disabled)));
+await open(page, selData());
+await page.click('#select-toggle-btn');
+for (const mode of ['tile', 'list']) {
+  await page.click('#layout-' + mode + '-btn');
+  for (const w of [1280, 400]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    const ok = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    const vis = await page.$eval('.row-check', (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
+    check('選択モードで、' + mode + ' の幅 ' + w + 'px でも崩れない', ok && vis, { ok, vis });
+  }
+}
+await page.setViewportSize({ width: 1280, height: 720 });
+await page.click('#layout-tile-btn');
+
+// ----- 選択バーから、タグ・グループを付け外し -----
+const opData = () => [bm(0, { tags: ['仕事'], groupName: '社内' }), bm(1, { tags: ['仕事'], groupName: '社内' }), bm(2, { groupName: '個人' }), bm(3)];
+const startSelect = async (p, data, titles) => {
+  await open(p, data);
+  await p.click('#select-toggle-btn');
+  for (const t of titles) await p.locator('.card--list[data-card-id="i' + t.slice(1) + '"] .row-check').check();
+};
+const popOp = async (p, which, name, op) => {
+  await p.click(which === 'tag' ? '#select-tag-btn' : '#select-group-btn');
+  if (name !== null) await p.fill('#select-name', name);
+  await p.click('[data-select-op="' + op + '"]');
+};
+const selConfirm = (p) => p.$eval('#select-confirm', (e) => e.textContent);
+const diffCount = (a, b, f) => a.filter((x, i) => f(x) !== f(b[i])).length;
+await startSelect(page, opData(), ['T1', 'T2', 'T3']);
+{
+  const before = await bulkStored(page);
+  await popOp(page, 'tag', '仕事', 'add');
+  check('タグを付ける: 確認に、実際に変わる件だけが出る(すでに付いている件は数えない)', (await selConfirm(page)).includes('「仕事」を 2 件に付けます'), await selConfirm(page));
+  check('適用の前は、データが変わらない', JSON.stringify(await bulkStored(page)) === JSON.stringify(before));
+  await page.click('#select-apply');
+  const after = await bulkStored(page);
+  check('適用すると、変わる件だけが変わり、選択と結果が残る', tagsOf(after, 'i2') === '["仕事"]' && tagsOf(after, 'i3') === '["仕事"]' && tagsOf(after, 'i0') === '["仕事"]' && (await selCount(page)) === '3 件を選択中' && (await page.$eval('#select-result', (e) => e.textContent)).includes('2 件に付けました') && (await page.$eval('#select-pop', (e) => e.hidden)), after);
+  check('確認の件数と、実際に変わった件数が一致する(タグを付ける)', diffCount(before, after, (b) => JSON.stringify(b.tags)) === 2);
+}
+await startSelect(page, opData(), ['T0', 'T1', 'T3']);
+await popOp(page, 'tag', '仕事', 'remove');
+check('タグを外す: 付いていない件は数えない', (await selConfirm(page)).includes('「仕事」を 2 件から外します'), await selConfirm(page));
+await page.click('#select-apply');
+check('外すと、付いていた件から外れる', tagsOf(await bulkStored(page), 'i0') === '[]' && tagsOf(await bulkStored(page), 'i1') === '[]');
+await startSelect(page, opData(), ['T2']);
+await popOp(page, 'tag', '仕事', 'remove');
+check('外すとき、付いている件が無いと、適用は出ない', (await selConfirm(page)).includes('付いている件がありません') && (await page.$$('#select-apply:visible')).length === 0, await selConfirm(page));
+await page.fill('#select-name', '存在しない');
+await page.click('[data-select-op="remove"]');
+check('存在しない名前の「外す」も、適用は出ない', (await selConfirm(page)).includes('付いている件がありません') && (await page.$$('#select-apply:visible')).length === 0);
+await startSelect(page, opData(), ['T0', 'T2']);
+await popOp(page, 'tag', '新規タグ', 'add');
+check('新しい名前を打てる(確認に(新規))', (await selConfirm(page)).includes('(新規)'), await selConfirm(page));
+await page.click('#select-apply');
+check('新規のタグが、選んだ件に付き、色は自動のまま', tagsOf(await bulkStored(page), 'i2') === '["新規タグ"]' && tagsOf(await bulkStored(page), 'i0').includes('新規タグ') && (await page.evaluate(() => localStorage.getItem('bookmarks_tag_colors'))) === null);
+await startSelect(page, opData(), ['T2']);
+for (const bad of ['a,b', 'a，b', 'a、b', '']) {
+  await popOp(page, 'tag', bad, 'add');
+  check('新しいタグ名の拒否(選択バー): ' + JSON.stringify(bad), (await page.$eval('#select-error', (e) => e.textContent.trim().length > 0)) && (await page.$$('#select-apply:visible')).length === 0, bad);
+}
+await open(page, [bm(0, { tags: ['Work'] }), bm(1)]);
+await page.click('#select-toggle-btn');
+await page.locator('.card--list[data-card-id="i1"] .row-check').check();
+await popOp(page, 'tag', 'work', 'add');
+check('既存と比較で同じ名前は、検査せず、既存の表記で付く', (await page.$eval('#select-error', (e) => e.textContent.trim())) === '' && (await selConfirm(page)).includes('「Work」を 1 件に付けます'), await selConfirm(page));
+await startSelect(page, opData(), ['T0', 'T2', 'T3']);
+{
+  const before = await bulkStored(page);
+  await popOp(page, 'group', '社内', 'set');
+  check('グループを設定: 別のグループから移る件数が出る(元からグループなしは数えない)', (await selConfirm(page)).includes('「社内」を 2 件に付けます') && (await selConfirm(page)).includes('うち 1 件は、別のグループから移ります'), await selConfirm(page));
+  await page.click('#select-apply');
+  const after = await bulkStored(page);
+  check('適用すると、移る・設定される。ほかは変わらない', groupOf(after, 'i2') === '社内' && groupOf(after, 'i3') === '社内' && groupOf(after, 'i0') === '社内' && groupOf(after, 'i1') === '社内' && diffCount(before, after, (b) => b.groupName || '') === 2);
+}
+await startSelect(page, opData(), ['T0', 'T3']);
+{
+  const before = await bulkStored(page);
+  await popOp(page, 'group', null, 'ungroup');
+  check('グループなしにする: 名前が要らず、実際に変わる件だけを数える', (await selConfirm(page)).includes('1 件を、グループなしにします'), await selConfirm(page));
+  await page.click('#select-apply');
+  const after = await bulkStored(page);
+  check('グループなしにすると、選んだ件だけが空になる', groupOf(after, 'i0') === '' && groupOf(after, 'i3') === '' && groupOf(after, 'i1') === '社内' && groupOf(after, 'i2') === '個人' && diffCount(before, after, (b) => b.groupName || '') === 1, { g: after.map((b) => b.groupName), before: before.map((b) => b.groupName) });
+}
+await startSelect(page, opData(), ['T0', 'T2']);
+await page.fill('#search-input', 'T2');
+await popOp(page, 'tag', 'x', 'add');
+check('表示外の選択も、適用の対象(確認の件数に含まれる)', (await selConfirm(page)).includes('「x」を 2 件に付けます') && (await selConfirm(page)).includes('表示外'), await selConfirm(page));
+await page.click('#select-apply');
+check('表示外の選択にも付く', tagsOf(await bulkStored(page), 'i0').includes('x') && tagsOf(await bulkStored(page), 'i2').includes('x'));
+await startSelect(page, opData(), ['T0']);
+await page.click('#select-tag-btn');
+await page.keyboard.press('Escape');
+check('Escape で、入力と確認だけが閉じ、選択は残る', (await page.$eval('#select-pop', (e) => e.hidden)) && (await selCount(page)) === '1 件を選択中' && !(await page.$eval('#select-bar', (e) => e.hidden)));
+await startSelect(page, opData(), []);
+await page.locator('.card--list[data-card-id="i2"] [data-action="edit"]').click();
+await page.fill('#edit-memo', 'draft');
+await page.click('#select-visible-btn');
+await popOp(page, 'tag', 'x', 'add');
+await page.click('#select-apply');
+check('編集中の件を変更しても、フォームのタグが新しくなり、入力中のメモは残る', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('x') && (await page.$eval('#edit-memo', (e) => e.value)) === 'draft');
+await startSelect(page, opData(), ['T0']);
+await page.locator('.card--list[data-card-id="i1"] [data-action="edit"]').click();
+check('選択モード中も、編集は使える', await page.$eval('#edit-memo', (e) => e.offsetParent !== null));
+await page.click('[data-action="cancel-edit"]');
+check('編集をやめても、選択は残る', (await selCount(page)) === '1 件を選択中');
+
+// ===== 最終レビューの指摘 =====
+// (1) 編集フォームの、未保存のタグ・グループの入力は、まとめての変更で消えない(同じ変更だけを下書きに入れる)
+await open(page, [bm(0, { tags: ['a'] }), bm(1)]);
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-tag-text', 'x');
+await page.press('#edit-tag-text', 'Enter');
+await page.fill('[data-edit-form] [name="group"]', 'Work');
+await openManage(page, 'tag');
+await newName(page, 'y');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+{
+  const chips = await page.$eval('#edit-tag-chips', (e) => e.textContent);
+  check('まとめてタグを付けても、編集中の未保存のタグ・グループは消えない', chips.includes('a') && chips.includes('x') && chips.includes('y') && (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === 'Work', { chips });
+}
+await open(page, [bm(0, { tags: ['a'] }), bm(1)]);
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-tag-text', 'x');
+await page.press('#edit-tag-text', 'Enter');
+await openManage(page, 'group');
+await newName(page, '社内');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('まとめてグループを付けても、編集中の未保存のタグは消えず、グループは新しくなる', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('x') && (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === '社内');
+// (2) チェックリストを開いている間に、別のタブが保存しても、触っていない件は変わらない
+await open(page, [bm(0, { tags: ['a'] }), bm(1), bm(2)]);
+await openManage(page, 'tag');
+await bulkOpen(page, 'a');
+await toggleId(page, 'i1');
+await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('bookmarks_data'));
+  d[2].tags = ['a'];
+  localStorage.setItem('bookmarks_data', JSON.stringify(d));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'bookmarks_data' }));
+});
+await page.click('#bulk-apply');
+{
+  const d = await bulkStored(page);
+  check('別のタブの保存があっても、触っていない件は変わらず、結果は確認のとおり', tagsOf(d, 'i2') === '["a"]' && tagsOf(d, 'i1') === '["a"]' && tagsOf(d, 'i0') === '["a"]' && (await page.$eval('#bulk-result', (e) => e.textContent)) === '「a」を 1 件に付けました', { d, r: await page.$eval('#bulk-result', (e) => e.textContent) });
+}
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);
