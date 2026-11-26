@@ -1256,6 +1256,49 @@ check('選択モード中も、編集は使える', await page.$eval('#edit-memo
 await page.click('[data-action="cancel-edit"]');
 check('編集をやめても、選択は残る', (await selCount(page)) === '1 件を選択中');
 
+// ===== 最終レビューの指摘 =====
+// (1) 編集フォームの、未保存のタグ・グループの入力は、まとめての変更で消えない(同じ変更だけを下書きに入れる)
+await open(page, [bm(0, { tags: ['a'] }), bm(1)]);
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-tag-text', 'x');
+await page.press('#edit-tag-text', 'Enter');
+await page.fill('[data-edit-form] [name="group"]', 'Work');
+await openManage(page, 'tag');
+await newName(page, 'y');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+{
+  const chips = await page.$eval('#edit-tag-chips', (e) => e.textContent);
+  check('まとめてタグを付けても、編集中の未保存のタグ・グループは消えない', chips.includes('a') && chips.includes('x') && chips.includes('y') && (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === 'Work', { chips });
+}
+await open(page, [bm(0, { tags: ['a'] }), bm(1)]);
+await page.locator('.card--list[data-card-id="i0"] [data-action="edit"]').click();
+await page.fill('#edit-tag-text', 'x');
+await page.press('#edit-tag-text', 'Enter');
+await openManage(page, 'group');
+await newName(page, '社内');
+await toggleId(page, 'i0');
+await page.click('#bulk-apply');
+await page.click('#tag-manage-close-btn');
+check('まとめてグループを付けても、編集中の未保存のタグは消えず、グループは新しくなる', (await page.$eval('#edit-tag-chips', (e) => e.textContent)).includes('x') && (await page.$eval('[data-edit-form] [name="group"]', (e) => e.value)) === '社内');
+// (2) チェックリストを開いている間に、別のタブが保存しても、触っていない件は変わらない
+await open(page, [bm(0, { tags: ['a'] }), bm(1), bm(2)]);
+await openManage(page, 'tag');
+await bulkOpen(page, 'a');
+await toggleId(page, 'i1');
+await page.evaluate(() => {
+  const d = JSON.parse(localStorage.getItem('bookmarks_data'));
+  d[2].tags = ['a'];
+  localStorage.setItem('bookmarks_data', JSON.stringify(d));
+  window.dispatchEvent(new StorageEvent('storage', { key: 'bookmarks_data' }));
+});
+await page.click('#bulk-apply');
+{
+  const d = await bulkStored(page);
+  check('別のタブの保存があっても、触っていない件は変わらず、結果は確認のとおり', tagsOf(d, 'i2') === '["a"]' && tagsOf(d, 'i1') === '["a"]' && tagsOf(d, 'i0') === '["a"]' && (await page.$eval('#bulk-result', (e) => e.textContent)) === '「a」を 1 件に付けました', { d, r: await page.$eval('#bulk-result', (e) => e.textContent) });
+}
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

@@ -1253,7 +1253,7 @@
     selectMode: false,      // 一覧の選択モード(まとめて付け外しのために、行を選ぶ)。保存しない
     selectPop: null,        // 選択バーの、タグ・グループの入力と確認({ kind: 'tag'|'group', plan })。開いていなければnull。保存しない
     selectedIds: {},        // 選択モードで選んだ行の id({ id: true })。検索・絞り込みを変えても残す。保存しない
-    bulk: null,             // 管理モーダルの「付け外し」(チェックリスト)の途中の状態({ kind, name, isNew, sel: {id: true}, search })。開いていなければnull。保存しない
+    bulk: null,             // 管理モーダルの「付け外し」(チェックリスト)の途中の状態({ kind, name, isNew, sel: {id: true}, base: {id: true}(開いた時点の所属), search })。開いていなければnull。保存しない
     manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
@@ -1782,9 +1782,16 @@
     });
     // 編集フォームを開いている件に変更が入るときは、入力中の下書きも同じ変更にする(あとで保存しても、上書きされない)。入力中のほかの項目は残す
     var draft = state.editDraft;
-    if (draft && byId[draft.id] && (plan.add.indexOf(draft.id) !== -1 || plan.remove.indexOf(draft.id) !== -1 || (plan.clear || []).indexOf(draft.id) !== -1)) {
-      draft.tags = byId[draft.id].tags.slice();
-      draft.groupName = byId[draft.id].groupName;
+    if (draft && byId[draft.id]) {
+      // 保存済みのデータではなく、同じ変更だけを下書きに入れる(入力中の未保存のタグ・グループは消さない)
+      if (plan.add.indexOf(draft.id) !== -1) {
+        if (isGroup) draft.groupName = plan.name; else addTagTo(draft.tags, plan.name);
+      }
+      if (plan.remove.indexOf(draft.id) !== -1) {
+        if (!isGroup) draft.tags = draft.tags.filter(function (t) { return tagKey(t) !== tagKey(plan.name); });
+        else if (tagKey(draft.groupName) === tagKey(plan.name)) draft.groupName = '';
+      }
+      if ((plan.clear || []).indexOf(draft.id) !== -1) draft.groupName = '';
     }
     saveData(bookmarks);
     render();
@@ -2531,7 +2538,11 @@
   // いまのチェックから作る計画(チェックした件=付ける、していない件=外す)
   function bulkPlan() {
     var on = [], off = [];
-    bookmarks.forEach(function (b) { (state.bulk.sel[b.id] ? on : off).push(b.id); });
+    // 外す対象は、開いた時点で付いていて(base)、いまオフの件だけ。開いたあとに他のタブが付けた件など、触っていない件は変えない
+    bookmarks.forEach(function (b) {
+      if (state.bulk.sel[b.id]) on.push(b.id);
+      else if (state.bulk.base[b.id]) off.push(b.id);
+    });
     return planMembership(state.bulk.kind, state.bulk.name, on, off);
   }
 
@@ -2580,6 +2591,8 @@
       bulkList.setAttribute('data-for', stamp);
       bulkSearch.value = state.bulk.search;
       renderBulkList();
+    } else {
+      renderBulkSummary();
     }
   }
 
@@ -2589,7 +2602,9 @@
     var isGroup = state.manageTab === 'group';
     var sel = {};
     bookmarks.forEach(function (b) { if (isGroup ? inGroup(b, key) : hasTag(b.tags, item.name)) sel[b.id] = true; });
-    state.bulk = { kind: isGroup ? 'group' : 'tag', name: item.name, isNew: false, sel: sel, search: '' };
+    var base = {};
+    Object.keys(sel).forEach(function (id) { base[id] = true; });
+    state.bulk = { kind: isGroup ? 'group' : 'tag', name: item.name, isNew: false, sel: sel, base: base, search: '' };
     bulkResult.textContent = '';
     renderTagManageModal();
   }
@@ -2607,7 +2622,7 @@
     bulkNewError.textContent = '';
     bulkNewInput.value = '';
     if (existing) { openBulk(existing.key); return; }
-    state.bulk = { kind: isGroup ? 'group' : 'tag', name: name, isNew: true, sel: {}, search: '' };
+    state.bulk = { kind: isGroup ? 'group' : 'tag', name: name, isNew: true, sel: {}, base: {}, search: '' };
     bulkResult.textContent = '';
     renderTagManageModal();
   }
