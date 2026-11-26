@@ -435,6 +435,20 @@ check('詳細にグループが出る', detG.includes('グループ仕事'), det
 await page.click('.tag-group[data-group=""] .card--list', { position: { x: 6, y: 6 } });
 check('グループが無いブックマークの詳細には、グループの項目が出ない', !(await page.$eval('#detail', (e) => e.textContent)).includes('グループ'));
 
+// ===== 管理モーダルのタブ順(グループ → タグ) =====
+await open(page, [bm(0, { groupName: 'a', tags: ['x'] })]);
+await page.click('#tag-manage-open-btn');
+const tabOrder = await page.$$eval('.manage-tabs [data-manage-tab]', (els) => els.map((e) => e.dataset.manageTab));
+const tabSel = await page.$$eval('.manage-tabs [data-manage-tab]', (els) => els.map((e) => e.getAttribute('aria-selected')));
+check('管理モーダルは「グループ」のタブが先頭で、開くと選ばれている', JSON.stringify(tabOrder) === JSON.stringify(['group', 'tag']) && JSON.stringify(tabSel) === JSON.stringify(['true', 'false']), { tabOrder, tabSel });
+check('管理モーダルのタイトルは「グループ・タグの管理」', (await page.$eval('#tag-manage-title', (e) => e.textContent.trim())) === 'グループ・タグの管理');
+check('開いた直後の一覧はグループ', JSON.stringify(await page.$$eval('#tag-manage-list .tag-manage-name', (els) => els.map((e) => e.textContent))) === JSON.stringify(['a']));
+await page.click('[data-manage-tab="tag"]');
+await page.click('#tag-manage-close-btn');
+await page.click('#tag-manage-open-btn');
+check('開き直すと、また「グループ」が選ばれている', (await page.$eval('[data-manage-tab="group"]', (e) => e.getAttribute('aria-selected'))) === 'true');
+await page.click('#tag-manage-close-btn');
+
 // ===== グループ(管理: 改名・統合・削除・並べ替え) =====
 const mdata = [bm(0, { groupName: 'a', tags: ['x'] }), bm(1, { groupName: 'b' }), bm(2, { groupName: 'c' })];
 await open(page, mdata);
@@ -501,6 +515,7 @@ await open(page, [bm(0, { groupName: 'same', tags: ['same'] })]);
 await page.click('#group-filter-btn');
 await page.click('#group-popover [data-filter-key="same"]');
 await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="tag"]');
 await page.click('#tag-manage-list [data-action="edit-tag"][data-tag="same"]');
 await page.fill('.tag-rename-input', 'renamed');
 await page.click('.tag-rename-form button[type=submit]');
@@ -709,6 +724,7 @@ await page.click('#group-filter-btn');
 check('グループのパネルの色の点は、グループの色', (await styleH(page, '#group-popover [data-filter-key="same"]')) === '100');
 await page.keyboard.press('Escape');
 await page.click('#tag-manage-open-btn');
+await page.click('[data-manage-tab="tag"]');
 await page.click(colorBtn('same'));
 await slide(page, 200);
 check('タグの色を変えても、同名のグループの区画の色は変わらない', (await styleH(page, '.tag-group[data-group="same"]')) === '100' && JSON.stringify(await storedJson(page, 'bookmarks_tag_colors')) === JSON.stringify({ same: 200 }) && JSON.stringify(await storedJson(page, 'bookmarks_group_colors')) === JSON.stringify({ same: 100 }));

@@ -1065,12 +1065,12 @@
 <div class="modal-overlay" id="tag-manage-overlay" hidden>
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="tag-manage-title">
     <div class="modal-header">
-      <h2 id="tag-manage-title">タグ・グループの管理</h2>
+      <h2 id="tag-manage-title">グループ・タグの管理</h2>
       <button type="button" class="modal-close-btn" id="tag-manage-close-btn" aria-label="閉じる">&times;</button>
     </div>
     <div class="manage-tabs" role="tablist" aria-label="管理する対象">
-      <button type="button" role="tab" data-manage-tab="tag" aria-selected="true">タグ</button>
-      <button type="button" role="tab" data-manage-tab="group" aria-selected="false">グループ</button>
+      <button type="button" role="tab" data-manage-tab="group" aria-selected="true">グループ</button>
+      <button type="button" role="tab" data-manage-tab="tag" aria-selected="false">タグ</button>
     </div>
     <p class="tag-manage-hint" id="tag-manage-hint">既存のタグ名に改名すると、2つのタグが統合されます。改名は、影響を確認してから適用します。</p>
     <ul class="tag-manage-list" id="tag-manage-list"></ul>
@@ -1108,7 +1108,7 @@
     confirmRename: null,    // 改名の影響を確認中のタグのキー
     confirmDeleteTag: null, // タグ管理モーダルで削除の確認中のタグのキー
     colorEditing: null,     // タグ管理モーダルで色を選んでいるタグ(グループのタブではグループ)のキー
-    manageTab: 'tag'        // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'tag' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
+    manageTab: 'group'      // タグ管理モーダルのタブ('tag' か 'group')。開くたびに 'group' へ戻す。editingTag などの値は、グループのタブではグループのキーとして使う
   };
 
   /* ---------- データ層 ---------- */
@@ -2069,7 +2069,7 @@
   });
 
   function openTagManageModal() {
-    state.manageTab = 'tag';
+    state.manageTab = 'group';
     tagManageOverlay.hidden = false;
     renderTagManageModal();
     var firstBtn = tagManageList.querySelector('button');
