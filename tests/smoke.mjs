@@ -894,6 +894,39 @@ check('タイルは、左半分に落とすと直前に入る(左右で判定)',
 await dragCard('T1', 'LLLLL', 0.5, 0.8);
 check('タイルは、右半分に落とすと直後に入る(左右で判定)', JSON.stringify(await orderAfter()) === JSON.stringify(['L', 'T1', 'T2', 'T3']), await orderAfter());
 
+// ===== 最終レビューの指摘 =====
+// (1) タイルのままでも、幅 1280px でヘッダーが1行のまま(切り替えボタンで2行に折り返さない)
+await open(page, [bm(0), bm(1)]);
+await page.setViewportSize({ width: 1280, height: 720 });
+check('幅 1280px で、ヘッダーは1行(切り替えボタンを足しても折り返さない)', (await page.$eval('.app-header', (e) => Math.round(e.getBoundingClientRect().height))) < 100, await page.$eval('.app-header', (e) => e.getBoundingClientRect().height));
+check('切り替えボタンは、件数表示の行にある', (await page.$('.list-toolbar #layout-tile-btn')) !== null && (await page.$('.list-toolbar #layout-list-btn')) !== null);
+// (2) リストのドラッグ中の位置表示は、上下の線(上半分で上、下半分で下)
+await page.click('#layout-list-btn');
+{
+  const sb = await page.locator('.card--list', { hasText: 'T1' }).first().boundingBox();
+  const db = await page.locator('.card--list', { hasText: 'T0' }).first().boundingBox();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2 - 5, { steps: 3 });
+  await page.mouse.move(db.x + db.width / 2, db.y + db.height * 0.2, { steps: 10 });
+  await page.waitForTimeout(300); // box-shadow のトランジション(0.15s)が終わるのを待つ
+  const shadowTop = await page.$eval('.card--list.drop-before', (e) => getComputedStyle(e).boxShadow).catch(() => null);
+  await page.mouse.move(db.x + db.width / 2, db.y + db.height * 0.8, { steps: 4 });
+  await page.waitForTimeout(300);
+  const shadowBottom = await page.$eval('.card--list.drop-after', (e) => getComputedStyle(e).boxShadow).catch(() => null);
+  await page.mouse.up();
+  check('リストのドラッグ中の線は、上半分で上、下半分で下', !!shadowTop && !!shadowBottom && /0px 3px 0px 0px inset/.test(shadowTop) && /0px -3px 0px 0px inset/.test(shadowBottom), { shadowTop, shadowBottom });
+}
+// (3) 先頭のタグが長くても、リストの行は他の行と同じ高さ
+await open(page, [bm(0, { tags: ['とてもとても長いタグの名前がここに入ります。四十文字を超える長さです。四十文字を超える長さです', 'b', 'c'] }), bm(1, { tags: ['b'] })]);
+await page.click('#layout-list-btn');
+const hs = await page.$$eval('.card--list', (els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+check('リストは、先頭のタグが長くても、行の高さが揃う', hs[0] === hs[1] && (await noOverflow()), hs);
+// (4) 操作アイコンが5個の行でも、タイトルが 120px 以上
+await open(page, [bm(0, { title: 'ログインのある行', loginId: 'u', loginPassword: 'p', scheme: 'file', url: 'file:///C:/a.txt', domain: null, tags: ['タグ'] })]);
+await page.click('#layout-list-btn');
+check('リストは、操作アイコンが5個でも、タイトルが 120px 以上', (await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width))) >= 120, await page.$eval('.card--list .card-title', (e) => Math.round(e.getBoundingClientRect().width)));
+
 await browser.close();
 console.log(failed ? failed + ' 件失敗' : 'すべて成功');
 process.exit(failed ? 1 : 0);

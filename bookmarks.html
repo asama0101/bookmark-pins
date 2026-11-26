@@ -204,6 +204,7 @@
   }
 
   /* タイル/リストの切り替え */
+  .list-toolbar .seg { margin-left: auto; }
   .seg { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.6); }
   .seg button { display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 6px 12px; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.85rem; cursor: pointer; }
   .seg button:hover { color: var(--ink); }
@@ -645,10 +646,13 @@
   /* 編集フォームのカードの旧い飾り帯。新しいデザインでは使わない */
   .card-stub { display: none; }
 
-  /* ドラッグ中の位置表示: 区画はグリッドなので、左右の縁の線で示す(左半分に落とすと前、右半分で後ろ) */
+  /* ドラッグ中の位置表示: タイルは区画がグリッドなので、左右の縁の線で示す(左半分に落とすと前、右半分で後ろ) */
   .card.dragging { opacity: 0.45; }
   .card.drop-before { box-shadow: inset 4px 0 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
   .card.drop-after { box-shadow: inset -4px 0 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
+  /* リストは1列なので、上下の線で示す(上半分に落とすと前、下半分で後ろ) */
+  #bookmark-list.list-mode .card.drop-before { box-shadow: inset 0 3px 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
+  #bookmark-list.list-mode .card.drop-after { box-shadow: inset 0 -3px 0 var(--amber), 0 16px 32px -20px rgba(40, 60, 90, 0.3); }
   .card:focus { outline: 3px solid var(--amber); outline-offset: 3px; }
 
   .card-body {
@@ -792,9 +796,10 @@
   #bookmark-list.list-mode .card--list .card-title { grid-column: 3; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #bookmark-list.list-mode .row-memo-preview { grid-column: 4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #bookmark-list.list-mode .row-tags { grid-column: 5; min-width: 0; }
+  #bookmark-list.list-mode .row-tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #bookmark-list.list-mode .card--list .card-footer { grid-column: 6; margin-left: 0; }
   @container (max-width: 780px) {
-    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 200px) auto; row-gap: 2px; }
+    #bookmark-list.list-mode .card--list { grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 140px) auto; row-gap: 2px; }
     #bookmark-list.list-mode .row-grip, #bookmark-list.list-mode .seal { grid-row: 1 / 3; }
     #bookmark-list.list-mode .card--list .card-title { grid-column: 3; grid-row: 1; }
     #bookmark-list.list-mode .row-memo-preview { grid-column: 3; grid-row: 2; }
@@ -997,10 +1002,6 @@
     <button class="btn btn-ghost btn-compact" id="group-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="group-popover">グループ</button>
     <button class="btn btn-ghost btn-compact" id="tag-filter-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="tag-popover">タグ</button>
     <button class="btn btn-ghost btn-compact" id="tag-manage-open-btn" type="button">管理</button>
-    <span class="seg" role="group" aria-label="表示の切り替え">
-      <button type="button" id="layout-tile-btn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>タイル</button>
-      <button type="button" id="layout-list-btn" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="3" rx="1.5"/><rect x="1" y="6.5" width="14" height="3" rx="1.5"/><rect x="1" y="11" width="14" height="3" rx="1.5"/></svg>リスト</button>
-    </span>
     <button class="btn btn-ghost" id="export-btn" type="button">エクスポート</button>
     <button class="btn btn-ghost" id="import-btn" type="button">インポート</button>
     <button class="btn btn-ghost" id="help-btn" type="button">ヘルプ</button>
@@ -1095,6 +1096,10 @@
           <span id="filter-status-text"></span>
           <button type="button" class="btn-quiet" id="filter-clear-btn">解除 ×</button>
         </div>
+        <span class="seg" role="group" aria-label="表示の切り替え">
+          <button type="button" id="layout-tile-btn" aria-pressed="true"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1.5"/><rect x="9" y="1" width="6" height="6" rx="1.5"/><rect x="1" y="9" width="6" height="6" rx="1.5"/><rect x="9" y="9" width="6" height="6" rx="1.5"/></svg>タイル</button>
+          <button type="button" id="layout-list-btn" aria-pressed="false"><svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="2" width="14" height="3" rx="1.5"/><rect x="1" y="6.5" width="14" height="3" rx="1.5"/><rect x="1" y="11" width="14" height="3" rx="1.5"/></svg>リスト</button>
+        </span>
       </div>
     </div>
     <section class="list-section"><div class="list-grid" id="bookmark-list"></div></section>
