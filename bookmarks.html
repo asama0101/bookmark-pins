@@ -571,6 +571,8 @@
   .bulk-row:hover { background: var(--ivory); }
   .bulk-row input { width: 17px; height: 17px; accent-color: var(--amber); flex: 0 0 auto; }
   .bulk-t { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bulk-move { flex: 0 0 auto; font-size: 0.75rem; color: #8a6a2c; }
+  .bulk-move:empty { display: none; }
   .bulk-mark { flex: 0 0 auto; font-size: 0.75rem; font-weight: 600; }
   .bulk-mark.add { color: #2f7a55; }
   .bulk-mark.del { color: #a14a4a; }
@@ -1675,15 +1677,25 @@
 
   // kind('tag' か 'group')・名前 name の付け外しの計画。addIds・removeIds のうち、実際に変わる件だけを数える。
   // 名前は前後の空白を除き、既存の表記に合わせる。isNew は、その名前が、どの件にも付いていないとき真
+  // グループは1所属なので、付ける(設定する)と、別のグループにいた件は「移る」(moves。from は元のグループ名)になる。
+  // 外すのは、そのグループにいる件だけ(別のグループの件は変えない)
   function planMembership(kind, name, addIds, removeIds) {
-    var canon = kind === 'tag' ? canonicalTag(name) : '';
+    var isGroup = kind === 'group';
+    var canon = isGroup ? canonicalGroup(name) : canonicalTag(name);
     var plan = { kind: kind, name: canon, isNew: false, add: [], remove: [], moves: [] };
     if (!canon) return plan;
+    var key = tagKey(canon);
+    function has(b) { return isGroup ? tagKey(b.groupName) === key : hasTag(b.tags, canon); }
     var byId = Object.create(null);
     bookmarks.forEach(function (b) { byId[b.id] = b; });
-    plan.isNew = !bookmarks.some(function (b) { return hasTag(b.tags, canon); });
-    addIds.forEach(function (id) { if (byId[id] && !hasTag(byId[id].tags, canon)) plan.add.push(id); });
-    removeIds.forEach(function (id) { if (byId[id] && hasTag(byId[id].tags, canon)) plan.remove.push(id); });
+    plan.isNew = !bookmarks.some(has);
+    addIds.forEach(function (id) {
+      var b = byId[id];
+      if (!b || has(b)) return;
+      plan.add.push(id);
+      if (isGroup && b.groupName !== '') plan.moves.push({ id: id, from: b.groupName });
+    });
+    removeIds.forEach(function (id) { if (byId[id] && has(byId[id])) plan.remove.push(id); });
     return plan;
   }
 
@@ -1691,9 +1703,15 @@
   function applyPlan(plan) {
     var byId = Object.create(null);
     bookmarks.forEach(function (b) { byId[b.id] = b; });
-    plan.add.forEach(function (id) { if (byId[id]) addTagTo(byId[id].tags, plan.name); });
+    var isGroup = plan.kind === 'group';
+    plan.add.forEach(function (id) {
+      if (!byId[id]) return;
+      if (isGroup) byId[id].groupName = plan.name; else addTagTo(byId[id].tags, plan.name);
+    });
     plan.remove.forEach(function (id) {
-      if (byId[id]) byId[id].tags = byId[id].tags.filter(function (t) { return tagKey(t) !== tagKey(plan.name); });
+      if (!byId[id]) return;
+      if (isGroup) byId[id].groupName = '';
+      else byId[id].tags = byId[id].tags.filter(function (t) { return tagKey(t) !== tagKey(plan.name); });
     });
     saveData(bookmarks);
     render();
@@ -1705,7 +1723,8 @@
     if (plan.add.length) parts.push(plan.add.length + ' 件に付け');
     if (plan.remove.length) parts.push(plan.remove.length + ' 件から外し');
     if (!parts.length) return '';
-    return (plan.isNew ? '(新規) ' : '') + '「' + plan.name + '」を ' + parts.join('、') + (past ? 'ました' : 'ます');
+    return (plan.isNew ? '(新規) ' : '') + '「' + plan.name + '」を ' + parts.join('、') + (past ? 'ました' : 'ます') +
+      (plan.moves.length ? '(うち ' + plan.moves.length + ' 件は、別のグループから' + (past ? '移りました' : '移ります') + ')' : '');
   }
 
   /* ---------- フィルタ・ソート(タグの絞り込み + 検索) ---------- */
@@ -2295,7 +2314,8 @@
   function renderBulkSummary() {
     var plan = bulkPlan();
     var text = describePlan(plan, false);
-    var adding = Object.create(null), removing = Object.create(null);
+    var adding = Object.create(null), removing = Object.create(null), movingFrom = Object.create(null);
+    plan.moves.forEach(function (m) { movingFrom[m.id] = m.from; });
     plan.add.forEach(function (id) { adding[id] = true; });
     plan.remove.forEach(function (id) { removing[id] = true; });
     bulkSummary.textContent = text || '変更はありません';
@@ -2303,6 +2323,7 @@
     Array.prototype.forEach.call(bulkList.querySelectorAll('.bulk-row'), function (row) {
       var id = row.getAttribute('data-id');
       var mark = row.querySelector('.bulk-mark');
+      row.querySelector('.bulk-move').textContent = movingFrom[id] !== undefined ? '「' + movingFrom[id] + '」から移る' : '';
       if (adding[id]) { mark.className = 'bulk-mark add'; mark.textContent = '＋ 付く'; }
       else if (removing[id]) { mark.className = 'bulk-mark del'; mark.textContent = '− 外れる'; }
       else { mark.className = 'bulk-mark'; mark.textContent = ''; }
@@ -2312,7 +2333,7 @@
   function renderBulkList() {
     bulkList.innerHTML = bulkVisible().map(function (b) {
       return '<label class="bulk-row" data-id="' + escapeHtml(b.id) + '"><input type="checkbox" data-id="' + escapeHtml(b.id) + '"' + (state.bulk.sel[b.id] ? ' checked' : '') + '>' +
-        '<span class="bulk-t">' + escapeHtml(b.title) + '</span><span class="bulk-mark"></span></label>';
+        '<span class="bulk-t">' + escapeHtml(b.title) + '</span><span class="bulk-move"></span><span class="bulk-mark"></span></label>';
     }).join('') || '<p class="tag-manage-empty">該当がありません。</p>';
     renderBulkSummary();
   }
@@ -2339,9 +2360,10 @@
   function openBulk(key) {
     var item = (state.manageTab === 'group' ? getGroups() : getTags()).filter(function (t) { return t.key === key; })[0];
     if (!item) return;
+    var isGroup = state.manageTab === 'group';
     var sel = {};
-    bookmarks.forEach(function (b) { if (hasTag(b.tags, item.name)) sel[b.id] = true; });
-    state.bulk = { kind: 'tag', name: item.name, isNew: false, sel: sel, search: '' };
+    bookmarks.forEach(function (b) { if (isGroup ? inGroup(b, key) : hasTag(b.tags, item.name)) sel[b.id] = true; });
+    state.bulk = { kind: isGroup ? 'group' : 'tag', name: item.name, isNew: false, sel: sel, search: '' };
     bulkResult.textContent = '';
     renderTagManageModal();
   }
@@ -2430,6 +2452,7 @@
       '<span class="row-grip" aria-hidden="true">⠿</span>' +
       '<span class="tag-manage-name">' + name + '</span>' +
       '<span class="tag-manage-count">' + g.count + '</span>' +
+      '<button type="button" class="btn-quiet" data-action="bulk-open" data-tag="' + key + '" aria-label="' + name + 'を付ける対象を選ぶ">付け外し</button>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-up" data-tag="' + key + '" aria-label="' + name + 'を上へ"' + (index === 0 ? ' disabled' : '') + '>▲</button>' +
       '<button type="button" class="btn-quiet" data-action="move-tag-down" data-tag="' + key + '" aria-label="' + name + 'を下へ"' + (index === total - 1 ? ' disabled' : '') + '>▼</button>' +
       manageActionButtons(g) +
